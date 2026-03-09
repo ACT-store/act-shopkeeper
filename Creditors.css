@@ -1,0 +1,432 @@
+/* ============================================================
+   Creditors.css  —  A.C.T Shopkeeper App 
+   ============================================================ */
+
+.d-screen {
+  padding: 16px 20px 20px;
+  min-height: 100%;
+}
+
+/* ── Header row: search (left) + Add Debtor (right) ── */
+.d-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.d-search {
+  flex: 1;               /* takes all remaining space */
+  min-width: 0;          /* allows shrinking below content size */
+  padding: 9px 14px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #333;
+  background: #fff;
+  transition: border-color 0.2s;
+  outline: none;
+}
+.d-search::placeholder { color: #9ca3af; }
+.d-search:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.12); }
+
+/* Narrower search when + Supplier button is also in the header */
+.d-search-narrow { max-width: 140px; }
+
+.d-add-btn {
+  flex-shrink: 0;        /* never shrinks — stays on same line */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white; border: none; padding: 9px 16px;
+  border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+}
+.d-add-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102,126,234,0.4); }
+
+/* ── Debtor cards: always 3 per row ── */
+.d-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.d-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.09);
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.18s, box-shadow 0.18s;
+  min-width: 0;
+}
+.d-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.14); }
+
+.d-card-name {
+  font-weight: 600; font-size: 11px; color: #333;
+  margin-bottom: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.d-card-balance { font-size: 13px; font-weight: 700; color: #e63946; }
+
+/* ── Empty / loading ── */
+.d-empty {
+  grid-column: 1 / -1; text-align: center;
+  padding: 40px 20px; color: #9ca3af; font-size: 14px;
+}
+.d-loading { text-align: center; padding: 40px; color: #666; font-size: 15px; }
+
+/* ── Overlay ── */
+.d-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.48);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2000; padding: 16px;
+}
+
+/* ── Modal shell ── */
+.d-modal {
+  background: #fff; border-radius: 14px;
+  width: 100%; max-width: 560px;
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+  overflow: hidden;
+}
+.d-modal-sm { max-width: 440px; }
+
+/* ── Modal header ── */
+.d-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 1px solid #eee; flex-shrink: 0;
+}
+.d-modal-title { margin: 0; font-size: 18px; font-weight: 700; color: #1f2937; }
+.d-modal-actions { display: flex; gap: 8px; align-items: center; }
+
+.d-edit-btn {
+  background: #667eea; color: white; border: none;
+  padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  display: flex; align-items: center; transition: background 0.2s;
+}
+.d-edit-btn:hover { background: #5568d3; }
+
+.d-close-btn {
+  background: none; border: none; cursor: pointer; padding: 4px;
+  color: #6b7280; transition: color 0.2s;
+}
+.d-close-btn:hover { color: #1f2937; }
+
+/* ── Tabs ── */
+.d-tabs {
+  display: flex; border-bottom: 2px solid #f0f0f0;
+  background: #f8f9fa; flex-shrink: 0;
+}
+.d-tab {
+  flex: 1; padding: 13px 8px; border: none; background: transparent;
+  cursor: pointer; font-size: 13px; font-weight: 500; color: #6b7280;
+  border-bottom: 3px solid transparent; transition: all 0.2s;
+}
+.d-tab:hover { background: #f0f0f0; }
+.d-tab-active { color: #667eea; border-bottom-color: #667eea; background: #fff; }
+
+/* ── Tab body (Details) ── */
+.d-tab-body { padding: 18px 20px; overflow-y: auto; }
+
+.d-details-view { display: flex; flex-direction: column; gap: 10px; }
+.d-detail-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 9px 12px; background: #f8f9fa; border-radius: 8px;
+  gap: 10px;
+}
+.d-detail-label { font-weight: 600; font-size: 12px; color: #6b7280; white-space: nowrap; }
+.d-detail-value { font-size: 13px; color: #374151; text-align: right; word-break: break-word; }
+
+.d-debt-summary {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 6px; padding: 12px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+}
+.d-debt-summary .d-detail-label { color: rgba(255,255,255,0.85); }
+.d-debt-amount { font-size: 22px; font-weight: 800; color: #fff; }
+
+/* ── Edit form ── */
+.d-edit-form { display: flex; flex-direction: column; gap: 12px; }
+.d-form-group { display: flex; flex-direction: column; gap: 5px; }
+.d-form-group label { font-size: 12px; font-weight: 600; color: #374151; }
+.d-form-group input, .d-form-group textarea {
+  padding: 9px 12px; border: 1.5px solid #e0e0e0; border-radius: 7px;
+  font-size: 13px; font-family: inherit; transition: border-color 0.2s;
+}
+.d-form-group input:focus, .d-form-group textarea:focus {
+  outline: none; border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
+}
+.d-form-group textarea { resize: vertical; min-height: 60px; }
+
+.d-gender { display: flex; gap: 20px; }
+.d-gender-option {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 400; cursor: pointer;
+}
+.d-gender-option input { width: 16px; height: 16px; cursor: pointer; }
+
+.d-form-note { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
+.d-form-actions { display: flex; gap: 10px; margin-top: 6px; }
+.d-btn-cancel, .d-btn-save {
+  flex: 1; padding: 11px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.d-btn-cancel { background: #e5e7eb; color: #374151; }
+.d-btn-cancel:hover { background: #d1d5db; }
+.d-btn-save { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+.d-btn-save:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.35); }
+
+/* ── Add debtor form ── */
+.d-add-form {
+  padding: 18px 20px; display: flex; flex-direction: column;
+  gap: 12px; overflow-y: auto;
+}
+
+/* ── Payment form ── */
+.d-payment-form { padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.d-payment-input {
+  width: 100%; padding: 13px; border: 2px solid #e0e0e0; border-radius: 8px;
+  font-size: 20px; font-weight: 600; text-align: center; transition: border-color 0.2s;
+}
+.d-payment-input:focus { outline: none; border-color: #667eea; }
+.d-camera-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 18px; background: #667eea; color: white;
+  border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background 0.2s; align-self: center;
+}
+.d-camera-btn:hover { background: #5568d3; }
+.d-photo-preview { max-width: 100%; max-height: 180px; border-radius: 8px; object-fit: cover; align-self: center; }
+
+/* ── Debt History wrapper — sticky layout ── */
+.d-history-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;           /* clip — child handles scroll */
+  min-height: 0;
+}
+
+/* Sticky action bar: Notify left, Deposit right */
+.d-history-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;             /* never shrinks — stays sticky */
+  gap: 10px;
+}
+
+.d-notify-btn, .d-deposit-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s; border: none;
+}
+.d-notify-btn {
+  background: #fff; color: #667eea;
+  border: 2px solid #667eea;
+}
+.d-notify-btn:hover { background: #667eea; color: #fff; }
+
+.d-deposit-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(16,185,129,0.28);
+}
+.d-deposit-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.38); }
+
+.d-pdf-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s; border: none;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.28);
+}
+.d-pdf-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,0.38); }
+.d-pdf-btn:disabled { opacity: 0.65; transform: none; cursor: not-allowed; }
+
+/* Horizontally + vertically scrollable area for the history table */
+.d-history-scroll {
+  flex: 1;
+  overflow: auto;            /* both axes scroll together */
+  min-height: 0;
+}
+
+/* History table — thead does NOT use position:sticky here because
+   horizontal scroll must move headers with body columns.
+   The scroll container itself provides the sticky effect via the
+   d-history-wrapper flex layout above. */
+.d-history-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.d-history-table thead { background: #f8f9fa; }
+.d-history-table th {
+  padding: 9px 12px; text-align: left; font-weight: 600;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: #6b7280; border-bottom: 2px solid #e5e7eb; white-space: nowrap;
+}
+.d-history-table td {
+  padding: 9px 12px; border-bottom: 1px solid #f0f0f0;
+  color: #374151; white-space: nowrap;
+}
+.d-history-table tbody tr:hover { background: #f8f9fa; }
+
+/* Merged cells (Date, Time, Sale Total) — span multiple item rows */
+.d-merged { vertical-align: middle; border-bottom: 2px solid #e5e7eb !important; }
+.d-hist-first td { border-top: 2px solid rgba(102,126,234,0.12); }
+.d-hist-first:first-child td { border-top: none; }
+.d-hist-cont td { border-top: none; }
+
+.d-qty { text-align: center; }
+.d-sale-total { font-weight: 700; color: #667eea; }
+.d-empty-cell { text-align: center; padding: 24px; color: #9ca3af; font-style: italic; }
+
+/* ── Notify modal options ── */
+.d-notify-options { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.d-notify-opt {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border: none; border-radius: 9px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.18s;
+}
+.d-notify-wa  { background: #dcfce7; color: #16a34a; }
+.d-notify-wa:hover  { background: #16a34a; color: #fff; }
+.d-notify-em  { background: #dbeafe; color: #2563eb; }
+.d-notify-em:hover  { background: #2563eb; color: #fff; }
+.d-notify-sms { background: #fef3c7; color: #d97706; }
+.d-notify-sms:hover { background: #d97706; color: #fff; }
+
+/* Notify modal – flex column so preview area can scroll independently */
+.d-notify-modal {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 82vh !important;
+  overflow: hidden !important;
+}
+.d-notify-preview { padding: 12px 20px 18px; border-top: 1px solid #f0f0f0; }
+.d-notify-preview-scroll {
+  flex: 1; min-height: 0;
+  padding: 12px 20px 18px;
+  border-top: 1px solid #f0f0f0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.d-notify-preview-label { font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; margin-bottom: 6px; }
+.d-notify-preview-text { font-size: 12px; color: #6b7280; line-height: 1.5; }
+
+/* ── Sort button ── */
+.d-sort-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+.d-sort-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  background: #fff; border: 1.5px solid #d1d5db;
+  border-radius: 8px; cursor: pointer; color: #6b7280;
+  transition: all 0.2s;
+}
+.d-sort-btn:hover { border-color: #667eea; color: #667eea; }
+.d-sort-active { border-color: #667eea !important; background: #667eea !important; color: #fff !important; }
+
+.d-sort-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 3000;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14); min-width: 210px;
+  overflow: hidden;
+}
+.d-sort-option {
+  display: block; width: 100%;
+  padding: 11px 16px; text-align: left;
+  background: none; border: none; border-bottom: 1px solid #f0f0f0;
+  font-size: 13px; font-weight: 500; color: #374151; cursor: pointer;
+  transition: background 0.15s;
+}
+.d-sort-option:last-child { border-bottom: none; }
+.d-sort-option:hover { background: #f5f5f5; }
+.d-sort-option-active { color: #667eea; font-weight: 700; background: #eef0fd; }
+.d-sort-clear { color: #ef4444; font-size: 12px; }
+.d-sort-clear:hover { background: #fee2e2; }
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+  .d-screen { padding: 12px 12px 16px; }
+  .d-grid { gap: 8px; }
+  .d-card { padding: 8px 6px; }
+  .d-card-name { font-size: 10px; }
+  .d-card-balance { font-size: 12px; }
+  .d-search { padding: 8px 10px; font-size: 12px; }
+  .d-add-btn { padding: 8px 12px; font-size: 12px; }
+}
+
+/* ── Deposit row ── */
+.d-deposit-row td {
+  background-color: #f8f9fa;
+  border-top: 1.5px solid #e9ecef;
+  border-bottom: 1.5px solid #e9ecef;
+}
+
+/* Merged cell with spaced-letter text — very light grey, not dark */
+.d-deposit-merged-cell {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-style: italic;
+  vertical-align: middle;
+  background: #f1f3f5 !important;
+  padding: 10px 8px !important;
+}
+
+/* All regular sale rows — force white background so nothing leaks */
+.d-hist-first td,
+.d-hist-cont td {
+  background-color: #ffffff;
+}
+
+.d-deposited-amount {
+  font-weight: 700;
+  color: #10b981;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Balance column */
+.d-balance-cell {
+  font-weight: 700;
+  color: #374151;
+  text-align: right;
+  white-space: nowrap;
+}
+.d-balance-neg {
+  color: #dc2626;
+}
+
+/* ── Dark Mode ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .d-card { background: #1e2a3a; border-color: #334155; }
+[data-theme="dark"] .d-card-name { color: #ffffff; }
+[data-theme="dark"] .d-modal { background: #1e2a3a; }
+[data-theme="dark"] .d-modal-title { color: #ffffff; }
+[data-theme="dark"] .d-modal label { color: #ffffff; }
+[data-theme="dark"] .d-history-table td { color: #111827; background: #d1d5db; }
+[data-theme="dark"] .d-history-table th { color: #ffffff; background: #374151; }
+[data-theme="dark"] .d-history-table tbody tr:hover { background: #e5e7eb; }
+
+[data-theme="dark"] .d-detail-label { color: #374151; }
