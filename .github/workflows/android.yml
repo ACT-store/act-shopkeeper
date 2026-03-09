@@ -1,0 +1,70 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vite app
+        run: npm run build
+
+      - name: Set up Java (for Android build)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Capacitor CLI
+        run: npm install -g @capacitor/cli
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Prepare APK output
+        run: |
+          mkdir -p apk-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             apk-output/act-shopkeeper-latest.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             apk-output/act-shopkeeper-$(date +%Y%m%d)-${{ github.sha }}.apk
+
+      - name: Upload APK (latest)
+        uses: actions/upload-artifact@v4
+        with:
+          name: act-shopkeeper-latest
+          path: apk-output/act-shopkeeper-latest.apk
+          retention-days: 90
+
+      - name: Upload APK (dated)
+        uses: actions/upload-artifact@v4
+        with:
+          name: act-shopkeeper-${{ github.run_number }}-${{ github.sha }}
+          path: apk-output/act-shopkeeper-$(date +%Y%m%d)-${{ github.sha }}.apk
+          retention-days: 30
