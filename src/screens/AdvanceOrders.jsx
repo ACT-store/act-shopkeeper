@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Phone, Mail, Edit2, MessageSquare, ArrowUpDown, FileText, Truck } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import kadaeleLogo from '../assets/kadaeleLogo.js';
+import actLogo from '../assets/actLogo.js';
 import './AdvanceOrders.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -317,7 +317,7 @@ function AdvanceOrders() {
       : '  - (all items collected)';
 
     const subject = `Advance Order Reminder — ${name}`;
-    const body = `Dear ${salutation},\n\nThis is a polite reminder from Kadaele Services regarding your advance order.\n\nYou still haven't collected the following items of yours that you have already paid:\n${itemLines}\n\nPlease contact us to arrange your collection.\n\nThank you.\n\nBest regards,\nKadaele Services`;
+    const body = `Dear ${salutation},\n\nThis is a polite reminder from A.C.T Shop regarding your advance order.\n\nYou still haven't collected the following items of yours that you have already paid:\n${itemLines}\n\nPlease contact us to arrange your collection.\n\nThank you.\n\nBest regards,\nA.C.T Shop`;
     return { subject, body };
   };
 
@@ -329,11 +329,11 @@ function AdvanceOrders() {
       let logoLoaded = false;
       pdf.setFillColor(102, 126, 234);
       pdf.rect(0, 0, pageW, 26, 'F');
-      try { if (kadaeleLogo) { pdf.addImage(kadaeleLogo, 'PNG', margin, 2, 22, 22); logoLoaded = true; } } catch (_) {}
+      try { if (actLogo) { pdf.addImage(actLogo, 'PNG', margin, 2, 22, 22); logoLoaded = true; } } catch (_) {}
 
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(11); pdf.setFont('helvetica', 'bold');
-      pdf.text('Kadaele Services', logoLoaded ? margin + 26 : margin, 11);
+      pdf.text('A.C.T Shop', logoLoaded ? margin + 26 : margin, 11);
       pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
       pdf.text('Ph: 73057613  |  ritiamti102016@gmail.com', logoLoaded ? margin + 26 : margin, 17);
       pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
@@ -447,7 +447,7 @@ function AdvanceOrders() {
       });
 
       pdf.setFontSize(6.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(160, 160, 160);
-      pdf.text('Kadaele Services — Advance Order Statement', pageW / 2, pageH - 6, { align: 'center' });
+      pdf.text('A.C.T Shop — Advance Order Statement', pageW / 2, pageH - 6, { align: 'center' });
       return pdf;
     } catch (err) { console.error('PDF error:', err); return null; }
   };

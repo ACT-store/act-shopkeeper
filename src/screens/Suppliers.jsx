@@ -340,7 +340,7 @@ function Suppliers() {
       body =
 `Dear ${salutation},
 
-This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+This is a polite reminder from A.C.T Shop. You have an outstanding balance of ${balanceStr}.
 
 Please find attached a PDF of the statement with full details of your debt for your reference.
 
@@ -349,7 +349,7 @@ We kindly remind you that ${duePhrasing}, as you had promised to pay by. We appr
 Thank you for your attention and prompt payment.
 
 Best regards,
-Kadaele Services`;
+A.C.T Shop`;
 
     } else {
       // ── Due date has passed ────────────────────────────────────────────────
@@ -358,7 +358,7 @@ Kadaele Services`;
       body =
 `Dear ${salutation},
 
-This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+This is a polite reminder from A.C.T Shop. You have an outstanding balance of ${balanceStr}.
 
 Please find attached a PDF of the statement with full details of your debt for your reference.
 
@@ -367,7 +367,7 @@ We kindly remind you that the due date was ${daysOverdue} day${daysOverdue !== 1
 We appreciate if you could settle it as soon as possible. Thank you for your attention and prompt payment.
 
 Best regards,
-Kadaele Services`;
+A.C.T Shop`;
     }
 
     return { subject, body };

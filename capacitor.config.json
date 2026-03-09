@@ -1,29 +1,8 @@
 {
-  "appId": "com.a.c.t.shopkeeper",
-  "appName": "Shopkeeper",
+  "appId": "com.act.shop",
+  "appName": "A.C.T Shop",
   "webDir": "dist",
-  "android": {
-    "buildOptions": {
-      "signingType": "apksigner"
-    }
-  },
   "server": {
     "androidScheme": "https"
-  },
-  "plugins": {
-    "SplashScreen": {
-      "launchShowDuration": 3000,
-      "launchAutoHide": true,
-      "launchFadeOutDuration": 500,
-      "backgroundColor": "#667eea",
-      "androidSplashResourceName": "splash",
-      "androidScaleType": "CENTER_INSIDE",
-      "showSpinner": false,
-      "androidSpinnerStyle": "large",
-      "iosSpinnerStyle": "small",
-      "spinnerColor": "#ffffff",
-      "splashFullScreen": true,
-      "splashImmersive": true
-    }
   }
 }

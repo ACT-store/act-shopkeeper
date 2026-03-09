@@ -13,7 +13,7 @@
     VIBRATE          — optional haptic feedback on scan
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.a.c.t.shopkeeper">
+    package="com.act.shop">
 
     <!-- ── Permissions ── -->
     <uses-permission android:name="android.permission.INTERNET" />

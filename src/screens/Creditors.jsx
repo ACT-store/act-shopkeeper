@@ -363,7 +363,7 @@ function Creditors() {
       body =
 `Dear ${salutation},
 
-This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+This is a polite reminder from A.C.T Shop. You have an outstanding balance of ${balanceStr}.
 
 Please find attached a PDF of the statement with full details of your debt for your reference.
 
@@ -372,7 +372,7 @@ We kindly remind you that ${duePhrasing}, as you had promised to pay by. We appr
 Thank you for your attention and prompt payment.
 
 Best regards,
-Kadaele Services`;
+A.C.T Shop`;
 
     } else {
       // ── Due date has passed ────────────────────────────────────────────────
@@ -381,7 +381,7 @@ Kadaele Services`;
       body =
 `Dear ${salutation},
 
-This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+This is a polite reminder from A.C.T Shop. You have an outstanding balance of ${balanceStr}.
 
 Please find attached a PDF of the statement with full details of your debt for your reference.
 
@@ -390,7 +390,7 @@ We kindly remind you that the due date was ${daysOverdue} day${daysOverdue !== 1
 We appreciate if you could settle it as soon as possible. Thank you for your attention and prompt payment.
 
 Best regards,
-Kadaele Services`;
+A.C.T Shop`;
     }
 
     return { subject, body };
@@ -430,7 +430,7 @@ Kadaele Services`;
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(14);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Kadaele Services', margin, 10);
+      pdf.text('A.C.T Shop', margin, 10);
       pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
       pdf.text('Debt Statement', margin, 16);
@@ -503,7 +503,7 @@ Kadaele Services`;
       pdf.setFontSize(7);
       pdf.setTextColor(150, 150, 150);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('Kadaele Services — Confidential Debt Statement', pageW / 2, footerY, { align: 'center' });
+      pdf.text('A.C.T Shop — Confidential Debt Statement', pageW / 2, footerY, { align: 'center' });
 
       return pdf;
     } catch (err) {

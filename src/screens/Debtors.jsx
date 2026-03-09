@@ -3,7 +3,7 @@ import { useValidation, ValidationNote, errorBorder } from '../utils/validation.
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
-import kadaeleLogo from '../assets/kadaeleLogo.js';
+import actLogo from '../assets/actLogo.js';
 import './Debtors.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -366,7 +366,7 @@ function Debtors() {
       body =
 `Dear ${salutation},
 
-This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+This is a polite reminder from A.C.T Shop. You have an outstanding balance of ${balanceStr}.
 
 We kindly remind you that ${duePhrasing}, as you had promised to pay by. We appreciate if you could settle it not later than ${dueDateDisplay}.
 
@@ -375,7 +375,7 @@ If you would like a detailed report of your debt history in PDF, please let us k
 Thank you for your attention and prompt payment.
 
 Best regards,
-Kadaele Services`;
+A.C.T Shop`;
 
     } else {
       // ── Due date has passed ────────────────────────────────────────────────
@@ -384,7 +384,7 @@ Kadaele Services`;
       body =
 `Dear ${salutation},
 
-This is a polite reminder from Kadaele Services. You have an outstanding balance of ${balanceStr}.
+This is a polite reminder from A.C.T Shop. You have an outstanding balance of ${balanceStr}.
 
 We kindly remind you that the due date was ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} ago, as you had promised to pay by.
 
@@ -395,14 +395,14 @@ If you would like a detailed report of your debt history in PDF, please let us k
 Thank you for your attention and prompt payment.
 
 Best regards,
-Kadaele Services`;
+A.C.T Shop`;
     }
 
     return { subject, body };
   };
 
   // ── Generate A4 PDF of the debt statement ────────────────────────────────
-  // Draws: Kadaele logo, debtor info, full Debt History table, outstanding total.
+  // Draws: A.C.T logo, debtor info, full Debt History table, outstanding total.
   const generateA4PDF = async () => {
     try {
             
@@ -411,13 +411,13 @@ Kadaele Services`;
       const margin = 12;
       const pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-      // ── 1 & 2. Purple header bar + Kadaele logo on top ────────────────
+      // ── 1 & 2. Purple header bar + A.C.T logo on top ────────────────
       let logoLoaded = false;
       pdf.setFillColor(102, 126, 234);
       pdf.rect(0, 0, pageW, 26, 'F');
       try {
-        if (kadaeleLogo) {
-          pdf.addImage(kadaeleLogo, 'PNG', margin, 2, 22, 22);
+        if (actLogo) {
+          pdf.addImage(actLogo, 'PNG', margin, 2, 22, 22);
           logoLoaded = true;
         }
       } catch (_) { /* logo optional — continue without it */ }
@@ -427,14 +427,14 @@ Kadaele Services`;
         pdf.setTextColor(255, 255, 255);
         pdf.setFontSize(13);
         pdf.setFont('helvetica', 'bold');
-        pdf.text('Kadaele Services', margin, 12);
+        pdf.text('A.C.T Shop', margin, 12);
       }
 
       // Company name + contact left, DEBT STATEMENT centre, date right
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Kadaele Services', logoLoaded ? margin + 26 : margin, 11);
+      pdf.text('A.C.T Shop', logoLoaded ? margin + 26 : margin, 11);
       pdf.setFontSize(7);
       pdf.setFont('helvetica', 'normal');
       pdf.text('Ph: 73057613  |  ritiamti102016@gmail.com', logoLoaded ? margin + 26 : margin, 17);
@@ -601,7 +601,7 @@ Kadaele Services`;
       pdf.setFontSize(6.5);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(160, 160, 160);
-      pdf.text('Kadaele Services — Confidential Debt Statement', pageW / 2, pageH - 6, { align: 'center' });
+      pdf.text('A.C.T Shop — Confidential Debt Statement', pageW / 2, pageH - 6, { align: 'center' });
 
       return pdf;
     } catch (err) {

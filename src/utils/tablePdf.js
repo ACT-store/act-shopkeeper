@@ -23,7 +23,7 @@ export async function exportTableToPDF({ title, columns, rows, summary = [] }) {
   // ── 1. Logo ──────────────────────────────────────────────────────────────
   let logoDone = false;
   try {
-    const res = await fetch('/kadaele-logo.png');
+    const res = await fetch('/act-logo.png');
     if (res.ok) {
       const blob = await res.blob();
       const b64  = await new Promise((res, rej) => {
@@ -45,7 +45,7 @@ export async function exportTableToPDF({ title, columns, rows, summary = [] }) {
   if (!logoDone) {
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(12); pdf.setFont('helvetica', 'bold');
-    pdf.text('Kadaele Services', margin, 11);
+    pdf.text('A.C.T Shop', margin, 11);
   }
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
@@ -88,7 +88,7 @@ export async function exportTableToPDF({ title, columns, rows, summary = [] }) {
 
   // ── 5. Footer ────────────────────────────────────────────────────────────
   pdf.setFontSize(6.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(160, 160, 160);
-  pdf.text('Kadaele Services — Confidential', pageW / 2, pageH - 6, { align: 'center' });
+  pdf.text('A.C.T Shop — Confidential', pageW / 2, pageH - 6, { align: 'center' });
 
   // ── 6. Open PDF via "Open with" chooser (Google Drive, PDF viewer, etc.) ─
   const fileName = `${title.replace(/\s+/g, '_')}_${Date.now()}.pdf`;

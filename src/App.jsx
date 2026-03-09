@@ -463,7 +463,7 @@ function App() {
         listener = await CapApp.addListener('backButton', ({ canGoBack }) => {
           const overlay = document.querySelector('.d-overlay, .sr-modal-overlay, .pr-modal-overlay, .st-modal-overlay, .modal-overlay');
           if (overlay) return;
-          const confirmed = window.confirm('Close Kadaele Shopkeeper?');
+          const confirmed = window.confirm('Close A.C.T Shopkeeper?');
           if (confirmed) CapApp.exitApp();
         });
       } catch (_) { /* not native */ }
@@ -561,7 +561,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-left">
-          <img src="/kadaele-logo.png" alt="Kadaele Logo" className="header-logo" />
+          <img src="/act-logo.png" alt="ACT Logo" className="header-logo" />
           <div className="header-text">
             <h1 className="header-title">Shopkeeper</h1>
             <span className="header-user">{userName || userEmail.split('@')[0]}</span>

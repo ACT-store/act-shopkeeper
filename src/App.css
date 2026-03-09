@@ -17,7 +17,7 @@ body {
 
 /* PURPLE TOPBAR WITH LOGO */
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a4d3a 0%, #0a2d1f 100%);
   color: white;
   padding: 15px 20px;
   display: flex;
@@ -55,7 +55,7 @@ body {
 .header-user {
   font-size: 12px;
   font-weight: bold;
-  color: #90ee90;
+  color: #6ee7b7;
   opacity: 1;
 }
 
@@ -75,7 +75,7 @@ body {
 .online-dot {
   width: 8px;
   height: 8px;
-  background: #4ade80;
+  background: #34d399;
   border-radius: 50%;
   animation: pulse 2s infinite;
 }
@@ -113,7 +113,7 @@ body {
 }
 
 .nav-icon-btn {
-  background: #667eea;
+  background: #1a4d3a;
   color: white;
   border: none;
   border-radius: 50%;
@@ -127,7 +127,7 @@ body {
 }
 
 .nav-icon-btn:hover {
-  background: #5568d3;
+  background: #0d3d25;
   transform: scale(1.05);
 }
 
@@ -247,7 +247,7 @@ body {
 
 /* Help Modal Content */
 .help-content h3 {
-  color: #667eea;
+  color: #1a4d3a;
   margin-top: 0;
   margin-bottom: 12px;
   font-size: 20px;
@@ -305,11 +305,11 @@ body {
 
 .menu-item:hover {
   background: #f3f4f6;
-  border-color: #667eea;
+  border-color: #1a4d3a;
 }
 
 .menu-item.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a4d3a 0%, #0a2d1f 100%);
   color: white;
   font-weight: 600;
 }
@@ -369,7 +369,7 @@ body {
 }
 
 [data-theme="dark"] .menu-item.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a4d3a 0%, #0a2d1f 100%);
   color: white;
 }
 

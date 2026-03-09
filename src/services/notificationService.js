@@ -248,7 +248,7 @@ export async function scheduleCreditorReminders() {
         dateLabel = diffDays <= 1 ? 'yesterday' : `on ${purchaseDate.toLocaleDateString()}`;
       }
 
-      const body = `Kadaele Services still owes ${name} the amount of ${currencyFmt(balance)} for purchasing cargoes on credit${dateLabel ? ' ' + dateLabel : ''}.`;
+      const body = `A.C.T Shop still owes ${name} the amount of ${currencyFmt(balance)} for purchasing cargoes on credit${dateLabel ? ' ' + dateLabel : ''}.`;
 
       for (const h of fireHours) {
         const fireAt = new Date(now);

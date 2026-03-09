@@ -4,12 +4,12 @@ import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAPS1hhubgu9Dai4_dH8r-pCf5BaswGeQA",
-  authDomain: "kadaele-services.firebaseapp.com",
-  projectId: "kadaele-services",
-  storageBucket: "kadaele-services.firebasestorage.app",
-  messagingSenderId: "447417713147",
-  appId: "1:447417713147:web:a9bbc5529c433a9453cb5e"
+  apiKey: "REPLACE_WITH_ACT_STORE_API_KEY",
+  authDomain: "act-store-b377b.firebaseapp.com",
+  projectId: "act-store-b377b",
+  storageBucket: "act-store-b377b.appspot.com",
+  messagingSenderId: "REPLACE_WITH_ACT_STORE_SENDER_ID",
+  appId: "REPLACE_WITH_ACT_STORE_APP_ID"
 };
 
 // Initialize Firebase

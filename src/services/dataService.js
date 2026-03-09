@@ -28,7 +28,7 @@ import {
 
 // Configure localforage
 localforage.config({
-  name: 'kadaele-pos',
+  name: 'act-pos',
   storeName: 'pos_data',
 });
 
@@ -173,7 +173,7 @@ class DataService {
 
   // ── Start real-time Firebase listener for Goods collection ───────────────
   // Watches for products added, edited or deleted from ANY device (e.g. the
-  // Kadaele Inventory app) and merges changes into localforage immediately,
+  // A.C.T Inventory app) and merges changes into localforage immediately,
   // so the Shopkeeper app always shows up-to-date inventory without restart.
   startGoodsListener() {
     if (this._goodsUnsubscribe) return; // already listening
@@ -264,12 +264,12 @@ class DataService {
       if (userCredential.user) {
         const uid = userCredential.user.uid;
         try {
-          const users = await localforage.getItem('kadaele_users') || [];
+          const users = await localforage.getItem('act_users') || [];
           const userDoc = users.find(u => u.authUid === uid || u.id === uid);
           if (userDoc) {
             userDoc.lastSeen = new Date().toISOString();
             userDoc.isOnline = true;
-            await localforage.setItem('kadaele_users', users);
+            await localforage.setItem('act_users', users);
             if (this.isOnline) {
               await setDoc(doc(db, 'users', userDoc.id), { lastSeen: serverTimestamp(), isOnline: true }, { merge: true }).catch(() => {});
             }
@@ -317,7 +317,7 @@ class DataService {
       try {
         const u = auth.currentUser;
         if (u && this.isOnline) {
-          const users = await localforage.getItem('kadaele_users') || [];
+          const users = await localforage.getItem('act_users') || [];
           const userDoc = users.find(ud => ud.authUid === u.uid || ud.id === u.uid);
           if (userDoc) {
             await setDoc(doc(db, 'users', userDoc.id), { isOnline: false, lastSeen: serverTimestamp() }, { merge: true }).catch(() => {});
@@ -1827,14 +1827,14 @@ class DataService {
       const photoKey = `photo_${saleId}`;
       await localforage.setItem(photoKey, photoData);
 
-      // TODO: Upload to kadaele-services when online
+      // TODO: Upload to a.c.t-services when online
       if (this.isOnline) {
         // Simulate upload
         console.log('Uploading photo for sale:', saleId);
         // const formData = new FormData();
         // formData.append('photo', photoData);
         // formData.append('purchaseId', purchaseId);
-        // await fetch('https://kadaele-services.example.com/upload', {
+        // await fetch('https://a.c.t-services.example.com/upload', {
         //   method: 'POST',
         //   body: formData,
         // });
@@ -2638,7 +2638,7 @@ class DataService {
       const cached = localStorage.getItem('ks_shop_name');
       // Always try to refresh from Firebase if online
       if (this.isOnline && auth.currentUser) {
-        const users = await localforage.getItem('kadaele_users') || [];
+        const users = await localforage.getItem('act_users') || [];
         const owner = users.find(u => (u.role || '').toLowerCase() === 'shop owner');
         if (owner && (owner.shopName || owner.businessName || owner.storeName)) {
           const name = owner.shopName || owner.businessName || owner.storeName;
@@ -3135,28 +3135,28 @@ class DataService {
     }
   }
 
-  // ── Users (Kadaele Staffs) — read from 'users' Firestore collection ─────────
-  // Uses the same localforage key ('kadaele_users') as the Admin app so that
+  // ── Users (A.C.T Staffs) — read from 'users' Firestore collection ─────────
+  // Uses the same localforage key ('act_users') as the Admin app so that
   // changes made in Admin are available offline in Shopkeeper and vice versa.
   async getUsers() {
     try {
       if (this.isOnline && auth.currentUser) {
         const snap = await getDocs(collection(db, 'users'));
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        await localforage.setItem('kadaele_users', users);
+        await localforage.setItem('act_users', users);
         return users;
       }
     } catch (err) {
       console.error('Error fetching users from Firebase:', err);
     }
-    return await localforage.getItem('kadaele_users') || [];
+    return await localforage.getItem('act_users') || [];
   }
 
-  // ── Landlord — reads from the same 'kadaele_users' forage key ────────────
+  // ── Landlord — reads from the same 'act_users' forage key ────────────
   // Returns the landlord record (id === '__landlord__') if it exists.
   async getLandlord() {
     try {
-      const users = await localforage.getItem('kadaele_users') || [];
+      const users = await localforage.getItem('act_users') || [];
       return users.find(u => u.id === '__landlord__') || null;
     } catch (err) {
       console.error('Error fetching landlord from forage:', err);

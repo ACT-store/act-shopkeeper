@@ -538,7 +538,7 @@ function Checkout() {
                 <button
                   className="sr-scanner-settings-btn"
                   onClick={() => {
-                    alert('To enable camera:\n\nSettings → Apps → Kadaele Shopkeeper → Permissions → Camera → Allow');
+                    alert('To enable camera:\n\nSettings → Apps → A.C.T Shopkeeper → Permissions → Camera → Allow');
                   }}
                 >Open App Settings</button>
               )}
