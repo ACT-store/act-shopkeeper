@@ -70,8 +70,8 @@ export class ErrorBoundary extends React.Component {
 
 // Cash Reconciliation page index (used for navigation from closed modal)
 // NOTE: Withdrawals is inserted at index 4 (after Expenses), so indices shift by 1
-const CASH_RECON_INDEX = 11;
-const SETTINGS_INDEX   = 12;
+const CASH_RECON_INDEX = 10;
+const SETTINGS_INDEX   = 11;
 
 const PAGES = [
   { 
@@ -639,7 +639,7 @@ function App() {
               onClick={handleClosedModalOk}
               style={{
                 width:'100%', padding:'12px', fontSize:'15px', fontWeight:700,
-                background:'linear-gradient(135deg, #667eea, #764ba2)', color:'#fff',
+                background:'linear-gradient(135deg, #1a4d3a, #0a2d1f)', color:'#fff',
                 border:'none', borderRadius:'10px', cursor:'pointer',
               }}
             >
