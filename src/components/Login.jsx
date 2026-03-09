@@ -6,10 +6,10 @@ import './Login.css';
 /**
  * Converts a username into the hidden Firebase Auth email.
  * Must match exactly what the Admin app constructs in authService.js.
- * e.g. "maria_santos" → "maria_santos@act.app"
+ * e.g. "maria_santos" → "maria_santos@act-store.app"
  */
 function usernameToEmail(username) {
-  return `${username.trim().toLowerCase()}@act.app`;
+  return `${username.trim().toLowerCase()}@act-store.app`;
 }
 
 function Login({ onLoginSuccess }) {
