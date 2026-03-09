@@ -58,7 +58,7 @@ function Login({ onLoginSuccess }) {
       <div className="login-card">
         <div className="logo-section">
           <img src="/act-logo-login.png" alt="ACT Store Logo" className="login-logo" />
-          <h1 className="app-title">A.C.T Shop</h1>
+          <h1 className="app-title">A.C.T</h1>
           <h2 className="app-subtitle">Shopkeeper</h2>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
