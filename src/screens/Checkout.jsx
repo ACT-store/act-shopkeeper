@@ -3,6 +3,7 @@ import { useValidation, ValidationNote, errorBorder } from '../utils/validation.
 import { Calculator } from 'lucide-react';
 
 import { Capacitor } from '@capacitor/core';
+import { NativeSettings, AndroidSettings } from '@capacitor-community/native-settings';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import './Checkout.css';
@@ -538,7 +539,9 @@ function Checkout() {
                 <button
                   className="sr-scanner-settings-btn"
                   onClick={() => {
-                    alert('To enable camera:\n\nSettings → Apps → A.C.T Shopkeeper → Permissions → Camera → Allow');
+                    NativeSettings.openAndroid({
+                      option: AndroidSettings.ApplicationDetails,
+                    });
                   }}
                 >Open App Settings</button>
               )}
