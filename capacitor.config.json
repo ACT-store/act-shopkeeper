@@ -1,6 +1,6 @@
 {
   "appId": "com.act.shop",
-  "appName": "A.C.T Shop",
+  "appName": "Shopkeeper",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
