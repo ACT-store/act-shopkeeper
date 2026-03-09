@@ -9,7 +9,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+  background: linear-gradient(160deg, #0a1f0f 0%, #0d2e18 40%, #1a4d3a 100%);
   overflow: hidden;
   padding: 20px;
 }
@@ -50,7 +50,7 @@
 
 .app-subtitle {
   font-size: 15px;
-  color: #667eea;
+  color: #2d9e6b;
   margin: 0;
   font-weight: 600;
   letter-spacing: 1px;
@@ -80,14 +80,14 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #667eea;
+  color: #2d9e6b;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 5px;
   transition: color 0.2s;
 }
-.password-toggle:hover { color: #0f3460; }
+.password-toggle:hover { color: #0a2d1f; }
 .password-toggle:focus { outline: none; }
 
 .login-input {
@@ -101,7 +101,7 @@
 }
 .login-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: #2d9e6b;
   background: #fff;
 }
 
@@ -124,7 +124,7 @@
 }
 
 .login-button {
-  background: linear-gradient(135deg, #667eea 0%, #0f3460 100%);
+  background: linear-gradient(135deg, #1a4d3a 0%, #0a2d1f 100%);
   color: white;
   padding: 15px;
   border: none;
@@ -141,7 +141,7 @@
 
 .forgot-password-btn {
   background: transparent;
-  color: #667eea;
+  color: #2d9e6b;
   padding: 8px;
   border: none;
   font-size: 14px;
@@ -149,7 +149,7 @@
   text-decoration: underline;
   text-align: center;
 }
-.forgot-password-btn:hover { color: #0f3460; }
+.forgot-password-btn:hover { color: #0a2d1f; }
 .forgot-password-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 @media (max-width: 480px) {

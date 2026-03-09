@@ -35,6 +35,11 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Generate app icons and splash from resources/
+        run: |
+          npm install -g @capacitor/assets
+          npx capacitor-assets generate --android
+
       - name: Sync Capacitor Android
         run: npx cap sync android
 
@@ -51,19 +56,10 @@ jobs:
           mkdir -p apk-output
           cp android/app/build/outputs/apk/debug/app-debug.apk \
              apk-output/act-shopkeeper-latest.apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-             apk-output/act-shopkeeper-$(date +%Y%m%d)-${{ github.sha }}.apk
 
-      - name: Upload APK (latest)
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: act-shopkeeper-latest
           path: apk-output/act-shopkeeper-latest.apk
           retention-days: 90
-
-      - name: Upload APK (dated)
-        uses: actions/upload-artifact@v4
-        with:
-          name: act-shopkeeper-${{ github.run_number }}-${{ github.sha }}
-          path: apk-output/act-shopkeeper-$(date +%Y%m%d)-${{ github.sha }}.apk
-          retention-days: 30
