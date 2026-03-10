@@ -229,11 +229,11 @@ export default function Withdrawals() {
         </div>
         <div className="wd-summary-card wd-card-out">
           <div className="wd-card-label">Returned to Shop</div>
-          <div className="wd-card-value">{fmt(totalOut)}</div>
+          <div className="wd-card-value">{fmt(totalIn)}</div>
         </div>
         <div className="wd-summary-card wd-card-in">
           <div className="wd-card-label">{ownerUser ? `Handed to ${(ownerUser.gender||'').toLowerCase()==='female'?'Ms':'Mr'} ${ownerUser.fullName||ownerUser.name||'Owner'}` : 'Handed to Owner'}</div>
-          <div className="wd-card-value">{fmt(totalIn)}</div>
+          <div className="wd-card-value">{fmt(totalOut)}</div>
         </div>
       </div>
 
