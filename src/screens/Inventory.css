@@ -223,11 +223,13 @@
   min-width: 44px;
   text-align: center !important;
   /* right border to visually separate from scrolling content */
-  border-right: 2px solid var(--border, #e0e0e0);
+  border-right: 1px solid var(--border, #e0e0e0);
 }
 
 .inv-col-name {
+  left: 44px;
   min-width: 160px;
+  border-right: 2px solid var(--border, #e0e0e0);
 }
 
 /* SIZE column — compact, right of the frozen name column */
@@ -1281,3 +1283,59 @@
 [data-theme="dark"] .inv-import-stat-new .inv-import-stat-num  { color: #4ade80; }
 [data-theme="dark"] .inv-import-stat-skip .inv-import-stat-num { color: #fb923c; }
 [data-theme="dark"] .inv-import-banner { background: #166534; }
+
+/* ══════════════════════════════════════════════════════════════
+   STORAGE AREA TABS — Container / Storeroom / Tent / Tent-in-Store
+══════════════════════════════════════════════════════════════ */
+
+/* Container — warm amber */
+.inv-tab-btn-active-container {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #fff !important;
+  border-color: #b45309 !important;
+}
+
+/* Storeroom — slate blue */
+.inv-tab-btn-active-storeroom {
+  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  color: #fff !important;
+  border-color: #3730a3 !important;
+}
+
+/* Tent — earthy green */
+.inv-tab-btn-active-tent {
+  background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+  color: #fff !important;
+  border-color: #15803d !important;
+}
+
+/* Tent in Store — rose */
+.inv-tab-btn-active-tent-in-store {
+  background: linear-gradient(135deg, #f43f5e, #e11d48) !important;
+  color: #fff !important;
+  border-color: #be123c !important;
+}
+
+/* Area "Add Item" button */
+.inv-add-btn-area {
+  background: #374151;
+}
+.inv-add-btn-area:hover { background: #1f2937; }
+
+/* Area import button */
+.inv-import-btn-area {
+  background: #f0f4ff;
+  color: #4338ca;
+  border-color: #a5b4fc;
+}
+.inv-import-btn-area:hover:not(:disabled) {
+  background: #e0e7ff;
+  border-color: #818cf8;
+}
+
+[data-theme="dark"] .inv-tab-btn-active-container  { border-color: #92400e !important; }
+[data-theme="dark"] .inv-tab-btn-active-storeroom  { border-color: #312e81 !important; }
+[data-theme="dark"] .inv-tab-btn-active-tent       { border-color: #14532d !important; }
+[data-theme="dark"] .inv-tab-btn-active-tent-in-store { border-color: #9f1239 !important; }
+[data-theme="dark"] .inv-add-btn-area  { background: #1f2937; }
+[data-theme="dark"] .inv-import-btn-area { background: #1e1b4b; color: #a5b4fc; border-color: #3730a3; }
