@@ -811,7 +811,6 @@ function Inventory() {
                     <th className="inv-col-center">STOCK</th>
                     <th>STATUS</th>
                     <th className="inv-col-center">BARCODE</th>
-                    <th className="inv-col-center">EDIT</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -844,15 +843,6 @@ function Inventory() {
                               <ZoomIn size={18} strokeWidth={1.8} />
                             </button>
                           ) : <span className="inv-barcode-none">—</span>}
-                        </td>
-                        <td className="inv-col-center">
-                          <button
-                            className="inv-edit-row-btn"
-                            onClick={() => setEditingGood(good)}
-                            title="Edit product"
-                          >
-                            <Pencil size={15} strokeWidth={2} />
-                          </button>
                         </td>
                       </tr>
                     );
