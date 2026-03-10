@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, X, ZoomIn, Plus, Camera, Upload, Check, Crop, RotateCcw, Save, Pencil, FileText, FolderOpen } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { Camera as CapCamera } from '@capacitor/camera';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import './Inventory.css';
@@ -258,6 +257,7 @@ async function captureImage(source = 'camera') {
     });
   } else {
     try {
+      const { Camera: CapCamera } = await import('@capacitor/camera');
       const image = await CapCamera.getPhoto({
         quality: 90, allowEditing: false, resultType: 'dataUrl',
         ...(source === 'gallery' ? { source: 'PHOTOS' } : {}),
