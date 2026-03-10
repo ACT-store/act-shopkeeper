@@ -497,6 +497,19 @@ function SalesRecord() {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-render whenever another device records a sale (including credit sales)
+  useEffect(() => {
+    const unsubscribe = dataService.onSalesChange((updatedSales) => {
+      const sorted = (updatedSales || []).sort((a, b) => {
+        const dateA = new Date(a.date || a.createdAt || a.timestamp || 0);
+        const dateB = new Date(b.date || b.createdAt || b.timestamp || 0);
+        return dateB - dateA;
+      });
+      setSales(sorted);
+    });
+    return () => unsubscribe();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { applyFilters(); },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sales, appliedPaymentFilter, appliedDateFilter, appliedSelectedDate, appliedStartDate, appliedEndDate]);
