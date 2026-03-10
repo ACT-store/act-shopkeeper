@@ -3,7 +3,7 @@ import { useValidation, ValidationNote, errorBorder } from '../utils/validation.
 import { Calculator } from 'lucide-react';
 
 import { Capacitor } from '@capacitor/core';
-import { NativeSettings, AndroidSettings } from '@capacitor-community/native-settings';
+
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import './Checkout.css';
@@ -539,9 +539,8 @@ function Checkout() {
                 <button
                   className="sr-scanner-settings-btn"
                   onClick={() => {
-                    NativeSettings.openAndroid({
-                      option: AndroidSettings.ApplicationDetails,
-                    });
+                    // Open app settings - direct Android intent fallback
+                    try { window.open('package:' + (window?.Capacitor?.appInfo?.id || 'com.act.shopkeeper'), '_system'); } catch(e) {}
                   }}
                 >Open App Settings</button>
               )}
