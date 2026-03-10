@@ -7,6 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import './Checkout.css';
+import { NativeSettings, AndroidSettings } from 'capacitor-native-settings';
 
 // ── Barcode beep (Web Audio API — no file needed) ──────────────────────────
 function playBeep() {
@@ -539,8 +540,9 @@ function Checkout() {
                 <button
                   className="sr-scanner-settings-btn"
                   onClick={() => {
-                    // Open app settings - direct Android intent fallback
-                    try { window.open('package:' + (window?.Capacitor?.appInfo?.id || 'com.act.shopkeeper'), '_system'); } catch(e) {}
+                    NativeSettings.openAndroid({
+                      option: AndroidSettings.ApplicationDetails,
+                    });
                   }}
                 >Open App Settings</button>
               )}
