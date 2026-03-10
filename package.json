@@ -33,7 +33,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "capacitor-native-settings": "^8.0.0"
+    "capacitor-native-settings": "^6.0.0"
   },
   "devDependencies": {
     "@capacitor/android": "^6.0.0",
