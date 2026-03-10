@@ -183,6 +183,14 @@ function Debtors() {
 
   useEffect(() => { loadDebtors(); }, []);
 
+  // Re-render whenever another device records a credit sale or debt payment
+  useEffect(() => {
+    const unsubscribe = dataService.onDebtorsChange((updatedDebtors) => {
+      setDebtors(updatedDebtors || []);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Close sort menu when clicking outside
   useEffect(() => {
     const handler = (e) => { if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) setShowSortMenu(false); };
