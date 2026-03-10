@@ -8,7 +8,6 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     rollupOptions: {
-      external: ['@capacitor/local-notifications', '@capacitor/camera'],
       output: {
         manualChunks: undefined,
       },
