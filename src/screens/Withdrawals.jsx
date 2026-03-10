@@ -173,7 +173,6 @@ export default function Withdrawals() {
         >
           {showFilters ? (showApply ? 'Apply' : 'Close') : 'Filter'}
         </button>
-        {!showFilters && <span className="wd-filter-label">{getTitle()}</span>}
       </div>
 
       {showFilters && (
