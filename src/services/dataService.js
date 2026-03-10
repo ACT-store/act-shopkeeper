@@ -32,6 +32,14 @@ localforage.config({
   storeName: 'pos_data',
 });
 
+// Maps storage-area tab → localforage key + Firestore collection name
+const STORE_AREAS = {
+  container:     { key: 'container',     col: 'container'     },
+  storeroom:     { key: 'storeroom',     col: 'storeroom'     },
+  tent:          { key: 'tent',          col: 'tent'          },
+  tent_in_store: { key: 'tent_in_store', col: 'tent_in_store' },
+};
+
 // Data file keys
 const DATA_KEYS = {
   GOODS: 'goods',
@@ -3613,6 +3621,115 @@ class DataService {
         await setDoc(doc(db, 'commission_goods', goodId), { commissionEarned: all[idx].commissionEarned, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
       }
     } catch (e) { console.error('recordCommissionSale error:', e); }
+  }
+
+  // ── Generic Storage-Area CRUD (Container / Storeroom / Tent / Tent-in-Store) ──
+  // All four areas share the same item schema:
+  //   { id, name, barcode, quantity, pcs, size, price, notes, createdAt, updatedAt }
+  // The 'areaKey' param is one of: 'container'|'storeroom'|'tent'|'tent_in_store'
+
+  async getAreaItems(areaKey) {
+    const area = STORE_AREAS[areaKey];
+    if (!area) return [];
+    try {
+      if (this.isOnline && auth.currentUser) {
+        const snap = await getDocs(collection(db, area.col));
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        await localforage.setItem(area.key, data);
+        return data;
+      }
+    } catch (err) { console.error(`getAreaItems(${areaKey}):`, err); }
+    return await localforage.getItem(area.key) || [];
+  }
+
+  async addAreaItem(areaKey, item) {
+    const area = STORE_AREAS[areaKey];
+    if (!area) throw new Error('Unknown store area: ' + areaKey);
+    const items = await localforage.getItem(area.key) || [];
+    const newItem = {
+      id:        item.id || this.generateId(),
+      name:      (item.name      || '').trim(),
+      barcode:   item.barcode    || '',
+      quantity:  parseFloat(item.quantity)  || 0,
+      pcs:       parseFloat(item.pcs)       || 0,
+      size:      (item.size      || '').trim(),
+      price:     parseFloat(item.price)     || 0,
+      notes:     (item.notes     || '').trim(),
+      createdAt: item.createdAt  || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    if (items.some(i => String(i.id) === String(newItem.id))) return newItem;
+    items.push(newItem);
+    await localforage.setItem(area.key, items);
+    if (this.isOnline && auth.currentUser) {
+      await setDoc(doc(db, area.col, newItem.id.toString()),
+        { ...newItem, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+    }
+    return newItem;
+  }
+
+  async updateAreaItem(areaKey, id, updates) {
+    const area = STORE_AREAS[areaKey];
+    if (!area) return null;
+    const items = await localforage.getItem(area.key) || [];
+    const idx = items.findIndex(i => String(i.id) === String(id));
+    if (idx === -1) return null;
+    items[idx] = { ...items[idx], ...updates, updatedAt: new Date().toISOString() };
+    await localforage.setItem(area.key, items);
+    if (this.isOnline && auth.currentUser) {
+      await setDoc(doc(db, area.col, id.toString()),
+        { ...items[idx], updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+    }
+    return items[idx];
+  }
+
+  async deleteAreaItem(areaKey, id) {
+    const area = STORE_AREAS[areaKey];
+    if (!area) return;
+    const items = await localforage.getItem(area.key) || [];
+    await localforage.setItem(area.key, items.filter(i => String(i.id) !== String(id)));
+    if (this.isOnline && auth.currentUser) {
+      await deleteDoc(doc(db, area.col, id.toString())).catch(() => {});
+    }
+  }
+
+  async importAreaItems(areaKey, rawItems) {
+    const area = STORE_AREAS[areaKey];
+    if (!area || !Array.isArray(rawItems) || rawItems.length === 0) return { added: 0, skipped: 0 };
+    const existing    = await localforage.getItem(area.key) || [];
+    const existingIds = new Set(existing.map(i => String(i.id)));
+    let added = 0, skipped = 0;
+    const toAdd = [];
+    for (const item of rawItems) {
+      if (!item || typeof item !== 'object' || !(item.name || '').trim()) { skipped++; continue; }
+      if (existingIds.has(String(item.id))) { skipped++; continue; }
+      const newItem = {
+        id:       item.id || this.generateId(),
+        name:     (item.name     || '').trim(),
+        barcode:  item.barcode   || '',
+        quantity: parseFloat(item.quantity) || 0,
+        pcs:      parseFloat(item.pcs)      || 0,
+        size:     (item.size     || '').trim(),
+        price:    parseFloat(item.price)    || 0,
+        notes:    (item.notes    || '').trim(),
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      toAdd.push(newItem);
+      existingIds.add(String(newItem.id));
+      added++;
+    }
+    if (toAdd.length > 0) {
+      const merged = [...existing, ...toAdd];
+      await localforage.setItem(area.key, merged);
+      if (this.isOnline && auth.currentUser) {
+        for (const item of toAdd) {
+          await setDoc(doc(db, area.col, item.id.toString()),
+            { ...item, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+        }
+      }
+    }
+    return { added, skipped };
   }
 
   async getWithdrawals() {
