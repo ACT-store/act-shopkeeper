@@ -65,6 +65,12 @@ function Checkout() {
   const scanIntervalRef = useRef(null);
   // Prevent duplicate scans within 1.5s of the same barcode
   const lastScanRef = useRef({ code: null, ts: 0 });
+  // Always hold the latest goods so the decodeFromConstraints callback never
+  // uses a stale closure.  Without this ref, goods captured when startScanner
+  // is called may be empty (if Firebase hasn't returned yet) and the lookup
+  // always fails silently.
+  const goodsRef = useRef(goods);
+  useEffect(() => { goodsRef.current = goods; }, [goods]);
 
   useEffect(() => {
     loadGoods();
@@ -279,15 +285,18 @@ function Checkout() {
   };
 
   const handleBarcodeDetected = (code) => {
-    // Look for a goods item with a matching barcode
-    const match = goods.find(g =>
+    // Use goodsRef.current (not the goods closure variable) so we always
+    // search the latest goods list even if Firebase updated it after the
+    // scanner started.
+    const match = goodsRef.current.find(g =>
       g.barcode && String(g.barcode).trim() === String(code).trim()
     );
 
     if (!match) {
-      // No match — show brief error, stop scanner silently (no beep)
-      setLastScanned({ code, matched: false });
+      // No match — show a visible error overlay (not just the in-scanner hint
+      // which disappears the moment scannerActive becomes false).
       stopScanner();
+      setScannerError(`No product found for barcode "${code}". Make sure the barcode value is saved in the product's profile.`);
       return;
     }
 
