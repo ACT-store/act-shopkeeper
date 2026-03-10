@@ -489,6 +489,95 @@ function Inventory() {
   const [areaForm, setAreaForm] = useState(AREA_FORM_BLANK);
   const [areaSaving, setAreaSaving] = useState(false);
 
+  // ── Move Stock modal ─────────────────────────────────────────────────────
+  const [showMoveModal,  setShowMoveModal]  = useState(false);
+  const [moveSourceTab,  setMoveSourceTab]  = useState(null);
+  const [moveItem,       setMoveItem]       = useState(null);   // selected item to move
+  const [moveSearchTerm, setMoveSearchTerm] = useState('');
+  const [moveQty,        setMoveQty]        = useState('');
+  const [moveDestTab,    setMoveDestTab]    = useState('');
+  const [moveSaving,     setMoveSaving]     = useState(false);
+
+  const AREA_LABELS = {
+    container:     '📦 Container',
+    storeroom:     '🗄️ Storeroom',
+    tent:          '⛺ Tent',
+    tent_in_store: '🧺 Tent in Store',
+  };
+
+  const openMoveModal = (tab) => {
+    setMoveSourceTab(tab);
+    setMoveItem(null);
+    setMoveSearchTerm('');
+    setMoveQty('');
+    setMoveDestTab('');
+    setShowMoveModal(true);
+  };
+
+  const handleMoveStock = async () => {
+    if (!moveItem)           { alert('Please select an item to move.');          return; }
+    if (!moveDestTab)        { alert('Please select a destination storage.');     return; }
+    const qty = parseInt(moveQty, 10);
+    if (!qty || qty <= 0)    { alert('Please enter a valid quantity.');           return; }
+
+    // Determine the stock field: container/storeroom use "quantity"; tent/tent_in_store use "pcs"
+    const srcUsesPcs  = moveSourceTab === 'tent' || moveSourceTab === 'tent_in_store';
+    const destUsesPcs = moveDestTab   === 'tent' || moveDestTab   === 'tent_in_store';
+    const srcField    = srcUsesPcs  ? 'pcs' : 'quantity';
+    const destField   = destUsesPcs ? 'pcs' : 'quantity';
+
+    const currentSrc  = parseInt(moveItem[srcField] || 0, 10);
+    if (qty > currentSrc) {
+      alert(`Not enough stock. Current ${srcField} in ${AREA_LABELS[moveSourceTab]}: ${currentSrc}`);
+      return;
+    }
+
+    setMoveSaving(true);
+    try {
+      // Deduct from source
+      await dataService.updateAreaItem(moveSourceTab, moveItem.id, {
+        ...moveItem,
+        [srcField]: currentSrc - qty,
+      });
+
+      // Find matching item in destination (by name, case-insensitive)
+      const destItems = await dataService.getAreaItems(moveDestTab);
+      const match = (destItems || []).find(
+        d => (d.name || '').toLowerCase().trim() === (moveItem.name || '').toLowerCase().trim()
+      );
+
+      if (match) {
+        const currentDest = parseInt(match[destField] || 0, 10);
+        await dataService.updateAreaItem(moveDestTab, match.id, {
+          ...match,
+          [destField]: currentDest + qty,
+        });
+      } else {
+        // Create new entry in destination
+        await dataService.addAreaItem(moveDestTab, {
+          name:     moveItem.name     || '',
+          barcode:  moveItem.barcode  || '',
+          size:     moveItem.size     || '',
+          price:    moveItem.price    || '',
+          notes:    moveItem.notes    || '',
+          quantity: destUsesPcs ? ''  : String(qty),
+          pcs:      destUsesPcs ? String(qty) : (moveItem.pcs || ''),
+        });
+      }
+
+      // Refresh both tabs
+      await loadAreaItems(moveSourceTab);
+      if (areaItems[moveDestTab]) await loadAreaItems(moveDestTab);
+
+      setShowMoveModal(false);
+    } catch (err) {
+      console.error('Move stock error:', err);
+      alert('Failed to move stock. Please try again.');
+    } finally {
+      setMoveSaving(false);
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState('');
   const [lightboxSrc, setLightboxSrc] = useState(null);
 
@@ -754,6 +843,12 @@ function Inventory() {
               onClick={() => { setEditCommission(null); setCommissionForm({ name:'', sellingPrice:'', commissionRate:'', ownerName:'', stock:'', notes:'' }); setShowCommissionModal(true); }}
               style={{ flexShrink:0, background:'linear-gradient(135deg,#667eea,#764ba2)', color:'#fff', border:'none', borderRadius:'10px', padding:'8px 14px', fontWeight:700, fontSize:'12px', cursor:'pointer', whiteSpace:'nowrap' }}
             >+ Add</button>
+          )}
+          {AREA_TABS.includes(activeTab) && (
+            <button
+              className="inv-move-stock-btn"
+              onClick={() => openMoveModal(activeTab)}
+            >⇄ Move Stock</button>
           )}
         </div>
 
@@ -1226,6 +1321,132 @@ function Inventory() {
           </div>
         </Portal>
       )}
+
+      {/* ── Move Stock Modal ── */}
+      {showMoveModal && (() => {
+        const srcItems = areaItems[moveSourceTab] || [];
+        const filteredMoveItems = moveSearchTerm
+          ? srcItems.filter(i => (i.name || '').toLowerCase().includes(moveSearchTerm.toLowerCase()))
+          : srcItems;
+        const destOptions = AREA_TABS.filter(t => t !== moveSourceTab);
+        const srcUsesPcs = moveSourceTab === 'tent' || moveSourceTab === 'tent_in_store';
+        const srcField   = srcUsesPcs ? 'pcs' : 'quantity';
+
+        return (
+          <Portal>
+            <Overlay className="inv-modal-overlay" onDismiss={() => setShowMoveModal(false)}>
+              <div className="inv-modal-content inv-move-modal-content" onPointerDown={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div className="inv-modal-header">
+                  <h2>⇄ Move Stock — {AREA_LABELS[moveSourceTab]}</h2>
+                  <button className="inv-modal-close" onClick={() => setShowMoveModal(false)}><X size={20}/></button>
+                </div>
+
+                <div className="inv-modal-body">
+
+                  {/* Step 1 — Select Item */}
+                  <div className="inv-move-section-label">1. Select item to move</div>
+                  <div className="inv-move-search-wrap">
+                    <Search size={14} className="inv-move-search-icon" />
+                    <input
+                      className="inv-input inv-move-search-input"
+                      placeholder={`Search in ${AREA_LABELS[moveSourceTab]}…`}
+                      value={moveSearchTerm}
+                      onChange={e => { setMoveSearchTerm(e.target.value); setMoveItem(null); }}
+                    />
+                    {moveSearchTerm && (
+                      <button className="inv-move-search-clear" onPointerDown={e => e.preventDefault()} onClick={() => { setMoveSearchTerm(''); setMoveItem(null); }}>
+                        <X size={13}/>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="inv-move-item-list">
+                    {filteredMoveItems.length === 0 ? (
+                      <div className="inv-move-empty">
+                        {moveSearchTerm ? `No items matching "${moveSearchTerm}"` : 'No items in this storage area.'}
+                      </div>
+                    ) : (
+                      filteredMoveItems.map(item => {
+                        const stock = item[srcField] != null && item[srcField] !== '' ? item[srcField] : 0;
+                        const isSelected = moveItem?.id === item.id;
+                        return (
+                          <div
+                            key={item.id}
+                            className={`inv-move-item-row${isSelected ? ' inv-move-item-selected' : ''}`}
+                            onClick={() => { setMoveItem(item); setMoveQty(''); }}
+                          >
+                            <div className="inv-move-item-name">{item.name || '—'}</div>
+                            <div className="inv-move-item-stock">
+                              {srcField === 'pcs' ? 'Pcs' : 'Qty'}: <strong>{stock}</strong>
+                            </div>
+                            {isSelected && <Check size={15} className="inv-move-item-check"/>}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Step 2 — Quantity */}
+                  {moveItem && (
+                    <>
+                      <div className="inv-move-section-label" style={{ marginTop: 18 }}>
+                        2. Quantity to move
+                        <span className="inv-move-available">
+                          Available: {moveItem[srcField] ?? 0}
+                        </span>
+                      </div>
+                      <input
+                        className="inv-input"
+                        type="number"
+                        min="1"
+                        max={moveItem[srcField] ?? undefined}
+                        placeholder={`Max ${moveItem[srcField] ?? 0}`}
+                        value={moveQty}
+                        onChange={e => setMoveQty(e.target.value)}
+                      />
+                    </>
+                  )}
+
+                  {/* Step 3 — Destination */}
+                  {moveItem && (
+                    <>
+                      <div className="inv-move-section-label" style={{ marginTop: 18 }}>3. Move to</div>
+                      <div className="inv-move-dest-grid">
+                        {destOptions.map(tab => (
+                          <button
+                            key={tab}
+                            className={`inv-move-dest-btn${moveDestTab === tab ? ' inv-move-dest-btn-active' : ''}`}
+                            onClick={() => setMoveDestTab(tab)}
+                          >
+                            {AREA_LABELS[tab]}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Actions */}
+                  <div className="inv-form-actions" style={{ marginTop: 24 }}>
+                    <button className="inv-btn-cancel" onClick={() => setShowMoveModal(false)} disabled={moveSaving}>
+                      Cancel
+                    </button>
+                    <button
+                      className="inv-move-confirm-btn"
+                      onClick={handleMoveStock}
+                      disabled={moveSaving || !moveItem || !moveDestTab || !moveQty}
+                    >
+                      {moveSaving ? 'Moving…' : '⇄ Confirm Move'}
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            </Overlay>
+          </Portal>
+        );
+      })()}
 
       {/* ── Asset Detail Modal ── */}
       {assetDetailItem && (
