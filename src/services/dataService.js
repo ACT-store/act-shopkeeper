@@ -171,13 +171,18 @@ class DataService {
                 localMap.set(fbId, fbData);
               }
             } else if (change.type === 'modified') {
-              // Remote update — merge carefully, prefer local if it's newer
+              // Remote update — merge carefully, prefer local if it's newer.
               const local = localMap.get(fbId);
-              const fbTime  = fbData.updatedAt?.seconds
+              const fbTime = fbData.updatedAt?.seconds
                 ? fbData.updatedAt.seconds * 1000
                 : new Date(fbData.updatedAt || 0).getTime();
-              const locTime = new Date(local?.updatedAt || 0).getTime();
-              if (!local || fbTime > locTime) {
+              // local.updatedAt may be an ISO string (set by updateDebtor) OR a
+              // plain {seconds, nanoseconds} object if it was pulled from Firebase
+              // by getDebtors() before the fix was applied.  Handle both forms.
+              const locTime = local?.updatedAt?.seconds
+                ? local.updatedAt.seconds * 1000
+                : new Date(local?.updatedAt || 0).getTime();
+              if (!local || fbTime > locTime || isNaN(locTime)) {
                 localMap.set(fbId, { ...fbData, updatedAt: new Date(fbTime).toISOString() });
               }
             }
@@ -1079,9 +1084,12 @@ class DataService {
         const firebaseDebtors = debtorsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-          lastPurchase: doc.data().lastPurchase?.toDate?.() || doc.data().lastPurchase,
-          lastPayment: doc.data().lastPayment?.toDate?.() || doc.data().lastPayment
+          // Convert Firestore Timestamps to ISO strings so localforage stores
+          // them as plain strings and timestamp comparisons work correctly.
+          createdAt:    doc.data().createdAt?.toDate?.()?.toISOString?.()    || doc.data().createdAt,
+          updatedAt:    doc.data().updatedAt?.toDate?.()?.toISOString?.()    || doc.data().updatedAt,
+          lastPurchase: doc.data().lastPurchase?.toDate?.()?.toISOString?.() || doc.data().lastPurchase,
+          lastPayment:  doc.data().lastPayment?.toDate?.()?.toISOString?.()  || doc.data().lastPayment,
         }));
 
         // Get existing local data
