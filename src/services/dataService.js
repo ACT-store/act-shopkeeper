@@ -76,11 +76,18 @@ class DataService {
     this._operationalAssetsFetched = false;
     this._debtorsUnsubscribe = null; // Firebase real-time listener handle
     this._goodsUnsubscribe = null;   // Firebase real-time listener handle for goods
-    
+    this._salesUnsubscribe = null;   // Firebase real-time listener handle for sales
+
     // ── Goods change subscribers ──────────────────────────────────────────
     // UI components register callbacks here so they re-render when the
     // Firebase real-time listener writes new goods data to localforage.
     this._goodsSubscribers = new Set();
+
+    // ── Debtors change subscribers ────────────────────────────────────────
+    this._debtorsSubscribers = new Set();
+
+    // ── Sales change subscribers ──────────────────────────────────────────
+    this._salesSubscribers = new Set();
     
     // Listen for online/offline events
     window.addEventListener('online', () => {
@@ -106,6 +113,30 @@ class DataService {
   _notifyGoodsSubscribers(goods) {
     for (const cb of this._goodsSubscribers) {
       try { cb(goods); } catch (e) { console.error('Goods subscriber error:', e); }
+    }
+  }
+
+  // ── Debtors change subscription API ─────────────────────────────────────
+  onDebtorsChange(callback) {
+    this._debtorsSubscribers.add(callback);
+    return () => this._debtorsSubscribers.delete(callback);
+  }
+
+  _notifyDebtorsSubscribers(debtors) {
+    for (const cb of this._debtorsSubscribers) {
+      try { cb(debtors); } catch (e) { console.error('Debtors subscriber error:', e); }
+    }
+  }
+
+  // ── Sales change subscription API ────────────────────────────────────────
+  onSalesChange(callback) {
+    this._salesSubscribers.add(callback);
+    return () => this._salesSubscribers.delete(callback);
+  }
+
+  _notifySalesSubscribers(sales) {
+    for (const cb of this._salesSubscribers) {
+      try { cb(sales); } catch (e) { console.error('Sales subscriber error:', e); }
     }
   }
 
@@ -154,6 +185,7 @@ class DataService {
 
           const merged = Array.from(localMap.values());
           await localforage.setItem(DATA_KEYS.DEBTORS, merged);
+          this._notifyDebtorsSubscribers(merged);
         },
         (error) => {
           console.error('Debtors Firebase listener error:', error);
@@ -242,6 +274,72 @@ class DataService {
     }
   }
 
+  // ── Start real-time Firebase listener for Sales collection ───────────────
+  // Watches for new/modified sales from ANY device and merges them into
+  // localforage immediately, so all users see credit sales (and all sales)
+  // recorded by other devices without needing to restart the app.
+  startSalesListener() {
+    if (this._salesUnsubscribe) return; // already listening
+    try {
+      this._salesUnsubscribe = onSnapshot(
+        collection(db, 'sales'),
+        async (snapshot) => {
+          if (snapshot.docChanges().length === 0) return;
+
+          const localSales = await localforage.getItem(DATA_KEYS.SALES) || [];
+          const localMap = new Map(localSales.map(s => [s.id, s]));
+
+          snapshot.docChanges().forEach((change) => {
+            const fbId = change.doc.id;
+            const data = change.doc.data();
+            const fbData = {
+              id: fbId,
+              ...data,
+              date: typeof data.date === 'string'
+                ? data.date
+                : (data.date?.toDate?.()?.toISOString?.() || null),
+              createdAt: data.createdAt?.toDate?.()?.toISOString?.() || data.createdAt,
+            };
+
+            if (change.type === 'removed') {
+              localMap.delete(fbId);
+            } else if (change.type === 'added') {
+              // Only add if not already present locally (avoid overwriting
+              // a sale that was just saved moments ago by this same device)
+              if (!localMap.has(fbId)) {
+                localMap.set(fbId, fbData);
+              }
+            } else if (change.type === 'modified') {
+              // Accept remote modification only if it is newer than local
+              const local = localMap.get(fbId);
+              const fbTime  = new Date(fbData.createdAt || 0).getTime();
+              const locTime = new Date(local?.createdAt || 0).getTime();
+              if (!local || fbTime >= locTime) {
+                localMap.set(fbId, fbData);
+              }
+            }
+          });
+
+          const merged = Array.from(localMap.values());
+          await localforage.setItem(DATA_KEYS.SALES, merged);
+          this._notifySalesSubscribers(merged);
+        },
+        (error) => {
+          console.error('Sales Firebase listener error:', error);
+        }
+      );
+    } catch (err) {
+      console.error('Could not start sales listener:', err);
+    }
+  }
+
+  stopSalesListener() {
+    if (this._salesUnsubscribe) {
+      this._salesUnsubscribe();
+      this._salesUnsubscribe = null;
+    }
+  }
+
   // Authentication methods
   async login(email, password) {
     try {
@@ -277,9 +375,10 @@ class DataService {
         } catch (_) {}
       }
 
-      // Start real-time listeners for debtors and goods (handles remote changes)
+      // Start real-time listeners for debtors, goods and sales (handles remote changes)
       this.startDebtorsListener();
       this.startGoodsListener();
+      this.startSalesListener();
       
       // Store login state persistently
       await localforage.setItem('auth_user', {
@@ -313,6 +412,7 @@ class DataService {
     try {
       this.stopDebtorsListener();
       this.stopGoodsListener();
+      this.stopSalesListener();
       // Mark user offline before signing out
       try {
         const u = auth.currentUser;
@@ -355,9 +455,10 @@ class DataService {
               email: user.email,
               loggedInAt: new Date().toISOString()
             }).catch(err => console.error('Error storing auth state:', err));
-            // Start real-time listeners for debtors and goods
+            // Start real-time listeners for debtors, goods and sales
             this.startDebtorsListener();
             this.startGoodsListener();
+            this.startSalesListener();
             resolve(user);
           } else {
             // Check if we have backup auth state
