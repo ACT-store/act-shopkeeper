@@ -40,6 +40,9 @@ jobs:
           npm install -g @capacitor/assets
           npx capacitor-assets generate --android
 
+      - name: Copy custom AndroidManifest
+        run: cp src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+
       - name: Sync Capacitor Android
         run: npx cap sync android
 
