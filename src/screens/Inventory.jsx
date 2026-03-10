@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, ZoomIn, Plus, Camera, Upload, Check, Crop, RotateCcw, Save, Pencil, FileText, FolderOpen } from 'lucide-react';
+import { Search, X, ZoomIn, Camera, Upload, Check, Crop, RotateCcw, Save, Pencil, FileText } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
@@ -268,159 +268,6 @@ async function captureImage(source = 'camera') {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Add Product Modal
-───────────────────────────────────────────────────────────── */
-function AddProductModal({ onSave, onCancel }) {
-  const [form, setForm] = useState({
-    brand: '', name: '', size: '', price: '', category: '',
-    barcode: '', stock_quantity: '', barcodeImage: null,
-  });
-  const [saving, setSaving] = useState(false);
-  const [cropSrc, setCropSrc] = useState(null);
-  const [showStockWarning, setShowStockWarning] = useState(false);
-  const [stockFieldUnlocked, setStockFieldUnlocked] = useState(false);
-  const stockInputRef = useRef(null);
-
-  const getBarcodeImageUrl = (f) => f.barcodeImage || null;
-
-  const buildFullName = () => {
-    const brand = (form.brand || '').trim();
-    const name  = (form.name  || '').trim();
-    if (brand && name) return `${brand} ${name}`;
-    return brand || name;
-  };
-
-  const handleSubmit = async () => {
-    const brand = (form.brand || '').trim();
-    const productName = (form.name || '').trim();
-    if (!brand) { alert('Brand Name is required'); return; }
-    if (!productName) { alert('Product Name is required'); return; }
-    if (!(form.size || '').trim()) { alert('Size is required'); return; }
-    if (form.price === '' || form.price === null || form.price === undefined) { alert('Selling price is required'); return; }
-    if (parseFloat(form.price) < 0) { alert('Please enter a valid price'); return; }
-    if (!form.category || !form.category.trim()) { alert('Category is required'); return; }
-    setSaving(true);
-    try {
-      await onSave({
-        name: buildFullName(), brand,
-        size: (form.size || '').trim(),
-        price: parseFloat(form.price) || 0,
-        category: form.category || '',
-        barcode: form.barcode || '',
-        barcodeImage: getBarcodeImageUrl(form) || null,
-        stock_quantity: parseInt(form.stock_quantity) || 0,
-      });
-    } finally { setSaving(false); }
-  };
-
-  return (
-    <>
-      {cropSrc && (
-        <ImageCropper
-          src={cropSrc}
-          onCrop={(url) => { setForm(p => ({ ...p, barcodeImage: url })); setCropSrc(null); }}
-          onCancel={() => setCropSrc(null)}
-        />
-      )}
-      {showStockWarning && (
-        <StockWarningModal
-          onContinue={() => {
-            setShowStockWarning(false); setStockFieldUnlocked(true);
-            setTimeout(() => { if (stockInputRef.current) stockInputRef.current.focus(); }, 100);
-          }}
-          onCancel={() => setShowStockWarning(false)}
-        />
-      )}
-      <Portal>
-        <Overlay className="inv-modal-overlay" onDismiss={onCancel}>
-          <div className="inv-modal-content" onPointerDown={e => e.stopPropagation()}>
-            <div className="inv-modal-header">
-              <h2>Add New Product</h2>
-            </div>
-            <div className="inv-modal-body">
-              <div className="inv-edit-form">
-                <div className="inv-form-group">
-                  <label>Brand Name *</label>
-                  <input className="inv-input" value={form.brand || ''} placeholder="e.g. Mamee, Maggi, Nestle" required
-                    onChange={e => setForm(p => ({ ...p, brand: e.target.value }))} />
-                </div>
-                <div className="inv-form-group">
-                  <label>Product Name *</label>
-                  <input className="inv-input" value={form.name || ''} placeholder="e.g. Noodles, Milo, Cornflakes" required
-                    onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-                </div>
-                {(form.brand || form.name) && (
-                  <div className="inv-name-preview">
-                    Will appear as: <strong>{buildFullName() || '—'}</strong>
-                  </div>
-                )}
-                <div className="inv-form-group">
-                  <label>Size * <span className="inv-label-hint">(e.g. 300g, 1L, 2kg)</span></label>
-                  <input className="inv-input" value={form.size || ''} placeholder="e.g. 300g, 1L, 2kg" required
-                    onChange={e => setForm(p => ({ ...p, size: e.target.value }))} />
-                </div>
-                <div className="inv-form-row">
-                  <div className="inv-form-group">
-                    <label>Selling Price *</label>
-                    <input className="inv-input" type="number" min="0" step="0.01"
-                      value={form.price ?? ''} placeholder="0.00" required
-                      onChange={e => setForm(p => ({ ...p, price: e.target.value }))} />
-                  </div>
-                  <div className="inv-form-group">
-                    <label>Stock Qty <span className="inv-label-hint">(optional)</span></label>
-                    <input className="inv-input" type="number" min="0"
-                      value={form.stock_quantity ?? ''} placeholder="0"
-                      ref={stockInputRef}
-                      onPointerDown={() => { if (!stockFieldUnlocked) setShowStockWarning(true); }}
-                      onChange={e => setForm(p => ({ ...p, stock_quantity: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="inv-form-group">
-                  <label>Category *</label>
-                  <CategorySelect value={form.category || ''} onChange={val => setForm(p => ({ ...p, category: val }))} />
-                </div>
-                <div className="inv-form-group">
-                  <label>Barcode Image <span className="inv-label-hint">(optional)</span></label>
-                  <div className="inv-barcode-actions">
-                    <button className="inv-barcode-btn" type="button"
-                      onClick={async () => { const src = await captureImage('camera'); if (src) setCropSrc(src); }}>
-                      <Camera size={16} /> Camera
-                    </button>
-                    <button className="inv-barcode-btn inv-barcode-btn-secondary" type="button"
-                      onClick={async () => { const src = await captureImage('gallery'); if (src) setCropSrc(src); }}>
-                      <Upload size={16} /> Gallery
-                    </button>
-                  </div>
-                  {getBarcodeImageUrl(form) && (
-                    <div className="inv-barcode-preview">
-                      <img src={getBarcodeImageUrl(form)} alt="Barcode preview" />
-                      <div className="inv-barcode-preview-actions">
-                        <button className="inv-barcode-crop-btn" type="button" onClick={() => setCropSrc(getBarcodeImageUrl(form))}>
-                          <Crop size={14} /> Crop
-                        </button>
-                        <button className="inv-barcode-remove" type="button" onClick={() => setForm(p => ({ ...p, barcodeImage: null }))}>
-                          <X size={14} /> Remove
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="inv-form-actions">
-                  <button className="inv-btn-cancel" type="button" onClick={onCancel}>Cancel</button>
-                  <button className="inv-btn-save" type="button" onClick={handleSubmit} disabled={saving}>
-                    <Save size={16} /> {saving ? 'Saving…' : 'Add Product'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Overlay>
-      </Portal>
-    </>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────
    Edit Product Modal
 ───────────────────────────────────────────────────────────── */
 function EditProductModal({ good, onUpdate, onDelete, onCancel }) {
@@ -615,7 +462,6 @@ function Inventory() {
   const [goods, setGoods] = useState([]);
   const [goodsLoading, setGoodsLoading] = useState(true);
   const [goodsLastSynced, setGoodsLastSynced] = useState(null);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [editingGood, setEditingGood] = useState(null);
 
   const [assets, setAssets] = useState([]);
@@ -645,136 +491,6 @@ function Inventory() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [lightboxSrc, setLightboxSrc] = useState(null);
-
-  // ── Import DB state ──────────────────────────────────────────────────────────
-  const importFileRef   = useRef(null);
-  const [importPreview, setImportPreview]   = useState(null);  // { tab, filename, items, previewAdded, previewSkipped }
-  const [importLoading, setImportLoading]   = useState(false);
-  const [importResult,  setImportResult]    = useState(null);  // { added, skipped } shown briefly
-
-  // Trigger the hidden file input for the current active tab
-  const handleImportClick = () => {
-    if (importFileRef.current) {
-      importFileRef.current.value = '';   // reset so same file can be re-selected
-      importFileRef.current.click();
-    }
-  };
-
-  // Read & preview the selected file (no writes yet)
-  const handleImportFileSelected = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportLoading(true);
-    try {
-      const text = await file.text();
-      let parsed;
-      try { parsed = JSON.parse(text); } catch {
-        alert('Invalid file — must be a valid JSON (.db) file.');
-        setImportLoading(false);
-        return;
-      }
-      // Accept both a bare array and { data: [...] } wrapper
-      const items = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : null);
-      if (!items) {
-        alert('Invalid format — file must contain a JSON array of records.');
-        setImportLoading(false);
-        return;
-      }
-
-      // Dry-run: count how many are new vs already exist
-      let previewAdded = 0, previewSkipped = 0;
-      if (activeTab === 'goods') {
-        const existing = await (async () => {
-          const localforage = (await import('localforage')).default;
-          return await localforage.getItem('goods') || [];
-        })();
-        const existingIds = new Set(existing.map(g => String(g.id)));
-        const existingNS  = new Set(existing.map(g =>
-          `${(g.name||'').toLowerCase().trim()}|${(g.size||'').toLowerCase().trim()}`
-        ));
-        for (const item of items) {
-          if (!item?.name?.trim()) { previewSkipped++; continue; }
-          const ns = `${(item.name||'').toLowerCase().trim()}|${(item.size||'').toLowerCase().trim()}`;
-          if (existingIds.has(String(item.id)) || existingNS.has(ns)) previewSkipped++;
-          else previewAdded++;
-        }
-      } else if (activeTab === 'assets') {
-        const existing = await (async () => {
-          const localforage = (await import('localforage')).default;
-          return await localforage.getItem('operational_assets') || [];
-        })();
-        const existingIds = new Set(existing.map(a => String(a.id)));
-        for (const item of items) {
-          if (!item || typeof item !== 'object') { previewSkipped++; continue; }
-          if (existingIds.has(String(item.id))) previewSkipped++;
-          else previewAdded++;
-        }
-      } else if (activeTab === 'commission') {
-        const existing = await (async () => {
-          const localforage = (await import('localforage')).default;
-          return await localforage.getItem('commission_goods') || [];
-        })();
-        const existingIds = new Set(existing.map(g => String(g.id)));
-        for (const item of items) {
-          if (!item?.name?.trim()) { previewSkipped++; continue; }
-          if (existingIds.has(String(item.id))) previewSkipped++;
-          else previewAdded++;
-        }
-      }
-
-      // Dry-run for storage areas
-      if (AREA_TABS.includes(activeTab)) {
-        const lf = (await import('localforage')).default;
-        const lk = { container:'container', storeroom:'storeroom', tent:'tent', tent_in_store:'tent_in_store' };
-        const existing = await lf.getItem(lk[activeTab]) || [];
-        const existingIds = new Set(existing.map(i => String(i.id)));
-        for (const item of items) {
-          if (!item?.name?.trim()) { previewSkipped++; continue; }
-          if (existingIds.has(String(item.id))) previewSkipped++;
-          else previewAdded++;
-        }
-      }
-
-      setImportPreview({ tab: activeTab, filename: file.name, items, previewAdded, previewSkipped });
-    } catch (err) {
-      console.error('Import file read error:', err);
-      alert('Could not read the file. Please try again.');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  // Commit the import after user confirms
-  const handleImportConfirm = async () => {
-    if (!importPreview) return;
-    setImportLoading(true);
-    try {
-      let result;
-      if (importPreview.tab === 'goods') {
-        result = await dataService.importGoods(importPreview.items);
-        await loadGoods();
-      } else if (importPreview.tab === 'assets') {
-        result = await dataService.importOperationalAssets(importPreview.items);
-        await loadAssets();
-      } else if (importPreview.tab === 'commission') {
-        result = await dataService.importCommissionGoods(importPreview.items);
-        const d = await dataService.getCommissionGoods();
-        setCommissionGoods(d || []);
-      } else if (AREA_TABS.includes(importPreview.tab)) {
-        result = await dataService.importAreaItems(importPreview.tab, importPreview.items);
-        await loadAreaItems(importPreview.tab);
-      }
-      setImportPreview(null);
-      setImportResult(result);
-      // Auto-clear success banner after 4 s
-      setTimeout(() => setImportResult(null), 4000);
-    } catch (err) {
-      console.error('Import error:', err);
-      alert('Import failed. Please try again.');
-    } finally {
-      setImportLoading(false);
-    }
-  };
 
   // ── Load goods ──────────────────────────────────────────────────────────
   useEffect(() => { loadGoods(); }, []);
@@ -876,12 +592,6 @@ function Inventory() {
   };
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
-  const handleSaveAdd = async (data) => {
-    await dataService.addGood(data);
-    await loadGoods();
-    setShowAddModal(false);
-  };
-
   const handleUpdateGood = async (id, updates) => {
     await dataService.updateGood(id, updates);
     await loadGoods();
@@ -935,82 +645,6 @@ function Inventory() {
   return (
     <div className="inventory">
 
-      {/* ── Hidden file input for DB import (all tabs share one) ── */}
-      <input
-        ref={importFileRef}
-        type="file"
-        accept=".json,.db,.txt"
-        style={{ display: 'none' }}
-        onChange={handleImportFileSelected}
-      />
-
-      {/* ── Import success banner ── */}
-      {importResult && (
-        <div className="inv-import-banner">
-          ✅ Import complete — <strong>{importResult.added}</strong> added,{' '}
-          <strong>{importResult.skipped}</strong> skipped (already exist)
-          <button className="inv-import-banner-close" onClick={() => setImportResult(null)}>×</button>
-        </div>
-      )}
-
-      {/* ── Import preview / confirm modal ── */}
-      {importPreview && (
-        <Portal>
-          <Overlay className="inv-modal-overlay inv-confirm-overlay" onDismiss={() => setImportPreview(null)}>
-            <div className="inv-confirm-dialog inv-import-confirm-dialog" onPointerDown={e => e.stopPropagation()}>
-              <div className="inv-import-confirm-header">
-                <FolderOpen size={20} />
-                <span>Confirm Import</span>
-              </div>
-              <div className="inv-import-confirm-filename">📄 {importPreview.filename}</div>
-              <div className="inv-import-confirm-stats">
-                <div className="inv-import-stat inv-import-stat-total">
-                  <span className="inv-import-stat-num">{importPreview.items.length}</span>
-                  <span className="inv-import-stat-lbl">Total in file</span>
-                </div>
-                <div className="inv-import-stat inv-import-stat-new">
-                  <span className="inv-import-stat-num">{importPreview.previewAdded}</span>
-                  <span className="inv-import-stat-lbl">Will be added</span>
-                </div>
-                <div className="inv-import-stat inv-import-stat-skip">
-                  <span className="inv-import-stat-num">{importPreview.previewSkipped}</span>
-                  <span className="inv-import-stat-lbl">Already exist</span>
-                </div>
-              </div>
-              {importPreview.previewAdded === 0 ? (
-                <p className="inv-import-confirm-note">All records already exist — nothing new to import.</p>
-              ) : (
-                <p className="inv-import-confirm-note">
-                  {importPreview.previewAdded} new record{importPreview.previewAdded !== 1 ? 's' : ''} will be
-                  merged into <strong>{
-                    importPreview.tab === 'goods'         ? 'Goods' :
-                    importPreview.tab === 'assets'        ? 'Operational Assets' :
-                    importPreview.tab === 'commission'    ? 'Commission' :
-                    importPreview.tab === 'container'     ? 'Container' :
-                    importPreview.tab === 'storeroom'     ? 'Storeroom' :
-                    importPreview.tab === 'tent'          ? 'Tent' :
-                    importPreview.tab === 'tent_in_store' ? 'Tent in Store' : importPreview.tab
-                  }</strong>.
-                  Duplicates are automatically skipped.
-                </p>
-              )}
-              <div className="inv-confirm-actions">
-                <button className="inv-confirm-no" onClick={() => setImportPreview(null)} disabled={importLoading}>
-                  Cancel
-                </button>
-                <button
-                  className="inv-confirm-yes"
-                  onClick={handleImportConfirm}
-                  disabled={importLoading || importPreview.previewAdded === 0}
-                >
-                  {importLoading ? 'Importing…' : `Import ${importPreview.previewAdded} Record${importPreview.previewAdded !== 1 ? 's' : ''}`}
-                </button>
-              </div>
-            </div>
-          </Overlay>
-        </Portal>
-      )}
-
       {/* Lightbox */}
       {lightboxSrc && (
         <Portal>
@@ -1019,11 +653,6 @@ function Inventory() {
             <img src={lightboxSrc} alt="Barcode" className="inv-lightbox-img" onClick={e => e.stopPropagation()} />
           </div>
         </Portal>
-      )}
-
-      {/* Add modal */}
-      {showAddModal && (
-        <AddProductModal onSave={handleSaveAdd} onCancel={() => setShowAddModal(false)} />
       )}
 
       {/* Edit modal */}
@@ -1120,41 +749,11 @@ function Inventory() {
               >×</button>
             )}
           </div>
-          {activeTab === 'goods' && (
-            <button className="inv-add-btn" onClick={() => setShowAddModal(true)}>
-              <Plus size={16} /> Add Product
-            </button>
-          )}
-          {activeTab === 'goods' && (
-            <button className="inv-import-btn" onClick={handleImportClick} disabled={importLoading} title="Import goods from a .db file in Downloads">
-              <FolderOpen size={15} /> Import DB
-            </button>
-          )}
-          {activeTab === 'assets' && (
-            <button className="inv-import-btn inv-import-btn-assets" onClick={handleImportClick} disabled={importLoading} title="Import assets from a .db file in Downloads">
-              <FolderOpen size={15} /> Import DB
-            </button>
-          )}
           {activeTab === 'commission' && (
             <button
               onClick={() => { setEditCommission(null); setCommissionForm({ name:'', sellingPrice:'', commissionRate:'', ownerName:'', stock:'', notes:'' }); setShowCommissionModal(true); }}
               style={{ flexShrink:0, background:'linear-gradient(135deg,#667eea,#764ba2)', color:'#fff', border:'none', borderRadius:'10px', padding:'8px 14px', fontWeight:700, fontSize:'12px', cursor:'pointer', whiteSpace:'nowrap' }}
             >+ Add</button>
-          )}
-          {activeTab === 'commission' && (
-            <button className="inv-import-btn inv-import-btn-commission" onClick={handleImportClick} disabled={importLoading} title="Import commission products from a .db file in Downloads">
-              <FolderOpen size={15} /> Import DB
-            </button>
-          )}
-          {AREA_TABS.includes(activeTab) && (
-            <button className="inv-add-btn inv-add-btn-area" onClick={() => { setAreaForm(AREA_FORM_BLANK); setEditingAreaItem(null); setShowAreaAddModal(true); }}>
-              <Plus size={16} /> Add Item
-            </button>
-          )}
-          {AREA_TABS.includes(activeTab) && (
-            <button className="inv-import-btn inv-import-btn-area" onClick={handleImportClick} disabled={importLoading} title="Import items from a .db JSON file">
-              <FolderOpen size={15} /> Import DB
-            </button>
           )}
         </div>
 
@@ -1352,7 +951,7 @@ function Inventory() {
             <div className="inv-empty">
               {searchTerm
                 ? `No items matching "${searchTerm}"`
-                : 'No items yet. Tap "+ Add Item" or "Import DB" to get started.'}
+                : 'No items yet. Go online to sync from Firebase.'}
             </div>
           );
 
