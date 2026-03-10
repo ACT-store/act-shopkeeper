@@ -45,18 +45,17 @@ jobs:
 
       - name: Override splash / launch background colour (match login green, remove purple)
         run: |
-          COLORS_FILE="android/app/src/main/res/values/colors.xml"
-          mkdir -p "$(dirname "$COLORS_FILE")"
-          cat > "$COLORS_FILE" << 'COLORS_EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <!-- Login-screen green — replaces the default Capacitor purple splash -->
-              <color name="colorPrimary">#0d2e18</color>
-              <color name="colorPrimaryDark">#0a1f0f</color>
-              <color name="colorAccent">#2d9e6b</color>
-              <color name="ic_launcher_background">#0d2e18</color>
-          </resources>
-          COLORS_EOF
+          mkdir -p android/app/src/main/res/values
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
+            '<resources>' \
+            '    <color name="colorPrimary">#0d2e18</color>' \
+            '    <color name="colorPrimaryDark">#0a1f0f</color>' \
+            '    <color name="colorAccent">#2d9e6b</color>' \
+            '</resources>' > android/app/src/main/res/values/colors.xml
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
+            '<resources>' \
+            '    <color name="ic_launcher_background">#0d2e18</color>' \
+            '</resources>' > android/app/src/main/res/values/ic_launcher_background.xml
 
       - name: Sync Capacitor Android
         run: npx cap sync android
