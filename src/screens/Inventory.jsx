@@ -632,6 +632,17 @@ function Inventory() {
   // Asset detail modal
   const [assetDetailItem, setAssetDetailItem] = useState(null);
 
+  // ── Storage-area tabs: Container / Storeroom / Tent / Tent-in-Store ──────────
+  const AREA_TABS = ['container', 'storeroom', 'tent', 'tent_in_store'];
+  const [areaItems,   setAreaItems]   = useState({});
+  const [areaLoading, setAreaLoading] = useState({});
+  const [areaLastSynced, setAreaLastSynced] = useState({});
+  const [showAreaAddModal,  setShowAreaAddModal]  = useState(false);
+  const [editingAreaItem,   setEditingAreaItem]   = useState(null);
+  const AREA_FORM_BLANK = { name:'', barcode:'', quantity:'', pcs:'', size:'', price:'', notes:'' };
+  const [areaForm, setAreaForm] = useState(AREA_FORM_BLANK);
+  const [areaSaving, setAreaSaving] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [lightboxSrc, setLightboxSrc] = useState(null);
 
@@ -711,6 +722,19 @@ function Inventory() {
         }
       }
 
+      // Dry-run for storage areas
+      if (AREA_TABS.includes(activeTab)) {
+        const lf = (await import('localforage')).default;
+        const lk = { container:'container', storeroom:'storeroom', tent:'tent', tent_in_store:'tent_in_store' };
+        const existing = await lf.getItem(lk[activeTab]) || [];
+        const existingIds = new Set(existing.map(i => String(i.id)));
+        for (const item of items) {
+          if (!item?.name?.trim()) { previewSkipped++; continue; }
+          if (existingIds.has(String(item.id))) previewSkipped++;
+          else previewAdded++;
+        }
+      }
+
       setImportPreview({ tab: activeTab, filename: file.name, items, previewAdded, previewSkipped });
     } catch (err) {
       console.error('Import file read error:', err);
@@ -736,6 +760,9 @@ function Inventory() {
         result = await dataService.importCommissionGoods(importPreview.items);
         const d = await dataService.getCommissionGoods();
         setCommissionGoods(d || []);
+      } else if (AREA_TABS.includes(importPreview.tab)) {
+        result = await dataService.importAreaItems(importPreview.tab, importPreview.items);
+        await loadAreaItems(importPreview.tab);
       }
       setImportPreview(null);
       setImportResult(result);
@@ -785,6 +812,27 @@ function Inventory() {
   useEffect(() => {
     if (activeTab === 'assets') loadAssets();
   }, [activeTab]);
+
+  // ── Load storage-area tabs when active ─────────────────────────────────────
+  const loadAreaItems = async (areaKey) => {
+    setAreaLoading(prev => ({ ...prev, [areaKey]: true }));
+    try {
+      const data = await dataService.getAreaItems(areaKey);
+      const sorted = (data || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setAreaItems(prev => ({ ...prev, [areaKey]: sorted }));
+      setAreaLastSynced(prev => ({ ...prev, [areaKey]: new Date() }));
+    } catch (err) {
+      console.error('loadAreaItems:', areaKey, err);
+    } finally {
+      setAreaLoading(prev => ({ ...prev, [areaKey]: false }));
+    }
+  };
+
+  useEffect(() => {
+    if (AREA_TABS.includes(activeTab)) {
+      if (!(areaItems[activeTab]?.length)) loadAreaItems(activeTab);
+    }
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load commission goods when tab is active ─────────────────────────────
   useEffect(() => {
@@ -846,6 +894,39 @@ function Inventory() {
     setEditingGood(null);
   };
 
+  // ── Area-item CRUD handlers ──────────────────────────────────────────────────
+  const handleAreaAdd = async () => {
+    if (!areaForm.name.trim()) { alert('Name is required'); return; }
+    setAreaSaving(true);
+    try {
+      await dataService.addAreaItem(activeTab, areaForm);
+      await loadAreaItems(activeTab);
+      setShowAreaAddModal(false);
+      setAreaForm(AREA_FORM_BLANK);
+    } catch (err) { console.error(err); alert('Failed to save.'); }
+    finally { setAreaSaving(false); }
+  };
+
+  const handleAreaUpdate = async () => {
+    if (!areaForm.name.trim()) { alert('Name is required'); return; }
+    setAreaSaving(true);
+    try {
+      await dataService.updateAreaItem(activeTab, editingAreaItem.id, areaForm);
+      await loadAreaItems(activeTab);
+      setEditingAreaItem(null);
+      setAreaForm(AREA_FORM_BLANK);
+    } catch (err) { console.error(err); alert('Failed to update.'); }
+    finally { setAreaSaving(false); }
+  };
+
+  const handleAreaDelete = async (id) => {
+    if (!window.confirm('Delete this item? This cannot be undone.')) return;
+    await dataService.deleteAreaItem(activeTab, id);
+    await loadAreaItems(activeTab);
+    setEditingAreaItem(null);
+    setAreaForm(AREA_FORM_BLANK);
+  };
+
   const filteredGoods  = filterAndSort(goods,  searchTerm);
   const filteredAssets = filterAssets(assets, searchTerm);
 
@@ -901,7 +982,15 @@ function Inventory() {
               ) : (
                 <p className="inv-import-confirm-note">
                   {importPreview.previewAdded} new record{importPreview.previewAdded !== 1 ? 's' : ''} will be
-                  merged into <strong>{importPreview.tab === 'goods' ? 'Goods' : importPreview.tab === 'assets' ? 'Operational Assets' : 'Commission'}</strong>.
+                  merged into <strong>{
+                    importPreview.tab === 'goods'         ? 'Goods' :
+                    importPreview.tab === 'assets'        ? 'Operational Assets' :
+                    importPreview.tab === 'commission'    ? 'Commission' :
+                    importPreview.tab === 'container'     ? 'Container' :
+                    importPreview.tab === 'storeroom'     ? 'Storeroom' :
+                    importPreview.tab === 'tent'          ? 'Tent' :
+                    importPreview.tab === 'tent_in_store' ? 'Tent in Store' : importPreview.tab
+                  }</strong>.
                   Duplicates are automatically skipped.
                 </p>
               )}
@@ -956,6 +1045,10 @@ function Inventory() {
           >
             📦 Goods
           </button>
+          <button className={`inv-tab-btn${activeTab === 'container'     ? ' inv-tab-btn-active inv-tab-btn-active-container'   : ''}`} onClick={() => handleTabChange('container')}>📦 Container</button>
+          <button className={`inv-tab-btn${activeTab === 'storeroom'     ? ' inv-tab-btn-active inv-tab-btn-active-storeroom'   : ''}`} onClick={() => handleTabChange('storeroom')}>🗄️ Storeroom</button>
+          <button className={`inv-tab-btn${activeTab === 'tent'          ? ' inv-tab-btn-active inv-tab-btn-active-tent'        : ''}`} onClick={() => handleTabChange('tent')}>⛺ Tent</button>
+          <button className={`inv-tab-btn${activeTab === 'tent_in_store' ? ' inv-tab-btn-active inv-tab-btn-active-tent-in-store' : ''}`} onClick={() => handleTabChange('tent_in_store')}>🧺 Tent in Store</button>
           <button
             className={`inv-tab-btn${activeTab === 'assets' ? ' inv-tab-btn-active inv-tab-btn-active-assets' : ''}`}
             onClick={() => handleTabChange('assets')}
@@ -976,6 +1069,30 @@ function Inventory() {
             <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Products sold on behalf of others. Shop earns a commission per sale.</div>
           </div>
         )}
+        {activeTab === 'container' && (
+          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>📦 Container</div>
+            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Stock stored in the container. Tracks cartons, pieces, size and price.</div>
+          </div>
+        )}
+        {activeTab === 'storeroom' && (
+          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>🗄️ Storeroom</div>
+            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Stock held in the storeroom.</div>
+          </div>
+        )}
+        {activeTab === 'tent' && (
+          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>⛺ Tent</div>
+            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Items displayed and sold from the tent.</div>
+          </div>
+        )}
+        {activeTab === 'tent_in_store' && (
+          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>🧺 Tent in Store</div>
+            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Tent stock stored inside the building.</div>
+          </div>
+        )}
 
         <div className="inv-toolbar">
           <div className="inv-search-box">
@@ -983,7 +1100,15 @@ function Inventory() {
             <input
               type="text"
               className="inv-search-input"
-              placeholder={activeTab === 'goods' ? 'Search Product' : activeTab === 'assets' ? 'Search Asset' : 'Search Commission Product'}
+              placeholder={
+                activeTab === 'goods'         ? 'Search Front Store Product' :
+                activeTab === 'assets'        ? 'Search Asset'               :
+                activeTab === 'commission'    ? 'Search Commission Product'   :
+                activeTab === 'container'     ? 'Search Container Items'      :
+                activeTab === 'storeroom'     ? 'Search Storeroom Items'      :
+                activeTab === 'tent'          ? 'Search Tent Items'           :
+                activeTab === 'tent_in_store' ? 'Search Tent in Store Items'  : 'Search'
+              }
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -1021,6 +1146,16 @@ function Inventory() {
               <FolderOpen size={15} /> Import DB
             </button>
           )}
+          {AREA_TABS.includes(activeTab) && (
+            <button className="inv-add-btn inv-add-btn-area" onClick={() => { setAreaForm(AREA_FORM_BLANK); setEditingAreaItem(null); setShowAreaAddModal(true); }}>
+              <Plus size={16} /> Add Item
+            </button>
+          )}
+          {AREA_TABS.includes(activeTab) && (
+            <button className="inv-import-btn inv-import-btn-area" onClick={handleImportClick} disabled={importLoading} title="Import items from a .db JSON file">
+              <FolderOpen size={15} /> Import DB
+            </button>
+          )}
         </div>
 
         <div className="inv-meta-row">
@@ -1034,6 +1169,11 @@ function Inventory() {
                   Synced {goodsLastSynced.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
                 </span>
               )}
+            </>
+          ) : AREA_TABS.includes(activeTab) ? (
+            <>
+              <span className="inv-count">{(areaItems[activeTab] || []).filter(i => !searchTerm || (i.name||'').toLowerCase().includes(searchTerm.toLowerCase())).length} item{((areaItems[activeTab]||[]).length !== 1 ? 's' : '')}</span>
+              {areaLastSynced[activeTab] && <span className="inv-sync-label">Synced {areaLastSynced[activeTab].toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true })}</span>}
             </>
           ) : (
             <>
@@ -1196,9 +1336,104 @@ function Inventory() {
           )
         )}
 
+        {/* ── STORAGE AREA TABS (Container / Storeroom / Tent / Tent-in-Store) ── */}
+        {AREA_TABS.includes(activeTab) && (() => {
+          const tabItems = (areaItems[activeTab] || []);
+          const filtered = searchTerm
+            ? tabItems.filter(i => (i.name||'').toLowerCase().includes(searchTerm.toLowerCase()) || (i.barcode||'').includes(searchTerm))
+            : tabItems;
+          const loading  = areaLoading[activeTab];
+
+          const isTent        = activeTab === 'tent';
+          const isTentInStore = activeTab === 'tent_in_store';
+
+          if (loading) return <div className="inv-empty">Loading…</div>;
+          if (filtered.length === 0) return (
+            <div className="inv-empty">
+              {searchTerm
+                ? `No items matching "${searchTerm}"`
+                : 'No items yet. Tap "+ Add Item" or "Import DB" to get started.'}
+            </div>
+          );
+
+          return (
+            <div className="inv-table-wrapper">
+              <table className="inv-table">
+                <thead className="inv-thead">
+                  <tr>
+                    <th className="inv-col-frozen inv-col-num">#</th>
+                    <th className="inv-col-name">NAME</th>
+                    {!isTent && !isTentInStore && <th>BARCODE</th>}
+                    {!isTent && !isTentInStore && <th className="inv-col-center">CTN / QTY</th>}
+                    <th className="inv-col-center">PCS</th>
+                    {!isTent && !isTentInStore && <th>SIZE</th>}
+                    <th className="inv-col-right">PRICE</th>
+                    {!isTent && !isTentInStore && <th>NOTES</th>}
+                    <th className="inv-col-center">EDIT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((item, idx) => (
+                    <tr key={item.id} className="inv-data-row">
+                      <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
+                      <td className="inv-col-name inv-name-cell">
+                        <span className="inv-cell-value">{item.name || '—'}</span>
+                      </td>
+                      {!isTent && !isTentInStore && (
+                        <td className="inv-cat-cell">{item.barcode || '—'}</td>
+                      )}
+                      {!isTent && !isTentInStore && (
+                        <td className="inv-col-center">
+                          <span className="inv-cell-value">{item.quantity ?? '—'}</span>
+                        </td>
+                      )}
+                      <td className="inv-col-center">
+                        <span className="inv-cell-value">{item.pcs ?? '—'}</span>
+                      </td>
+                      {!isTent && !isTentInStore && (
+                        <td className="inv-size-cell">
+                          <span className="inv-cell-value">{item.size || '—'}</span>
+                        </td>
+                      )}
+                      <td className="inv-col-right">
+                        <span className="inv-cell-value">{item.price != null && item.price !== '' ? fmt(parseFloat(item.price)) : '—'}</span>
+                      </td>
+                      {!isTent && !isTentInStore && (
+                        <td className="inv-cat-cell" style={{ maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {item.notes || '—'}
+                        </td>
+                      )}
+                      <td className="inv-col-center">
+                        <button
+                          className="inv-edit-row-btn"
+                          onClick={() => {
+                            setEditingAreaItem(item);
+                            setAreaForm({
+                              name:     item.name     || '',
+                              barcode:  item.barcode  || '',
+                              quantity: item.quantity != null ? String(item.quantity) : '',
+                              pcs:      item.pcs      != null ? String(item.pcs)      : '',
+                              size:     item.size     || '',
+                              price:    item.price    != null ? String(item.price)    : '',
+                              notes:    item.notes    || '',
+                            });
+                            setShowAreaAddModal(true);
+                          }}
+                          title="Edit item"
+                        >
+                          <Pencil size={15} strokeWidth={2} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+
         {/* ── COMMISSION TAB ── */}
-        {activeTab === 'commission' && (
-          <>
+        {activeTab === 'commission' && (          <>
             {commissionLoading ? (
               <div style={{ textAlign:'center', padding:'40px', color:'var(--text-secondary,#9ca3af)' }}>Loading...</div>
             ) : commissionGoods.length === 0 ? (
@@ -1246,6 +1481,102 @@ function Inventory() {
         )}
 
       </div>{/* end inv-scroll-body */}
+
+      {/* ── Area Item Add / Edit Modal ── */}
+      {showAreaAddModal && (() => {
+        const isTent        = activeTab === 'tent';
+        const isTentInStore = activeTab === 'tent_in_store';
+        const areaLabels    = {
+          container:     '📦 Container',
+          storeroom:     '🗄️ Storeroom',
+          tent:          '⛺ Tent',
+          tent_in_store: '🧺 Tent in Store',
+        };
+        const isEdit = !!editingAreaItem;
+        return (
+          <Portal>
+            <Overlay className="inv-modal-overlay" onDismiss={() => { setShowAreaAddModal(false); setEditingAreaItem(null); setAreaForm(AREA_FORM_BLANK); }}>
+              <div className="inv-modal-content" onPointerDown={e => e.stopPropagation()}>
+                <div className="inv-modal-header">
+                  <h2>{isEdit ? 'Edit' : 'Add'} — {areaLabels[activeTab]}</h2>
+                  <button className="inv-modal-close" onClick={() => { setShowAreaAddModal(false); setEditingAreaItem(null); setAreaForm(AREA_FORM_BLANK); }}><X size={20}/></button>
+                </div>
+                <div className="inv-modal-body">
+                  <div className="inv-edit-form">
+
+                    <div className="inv-form-group">
+                      <label>Name *</label>
+                      <input className="inv-input" value={areaForm.name} placeholder="Item name"
+                        onChange={e => setAreaForm(f => ({...f, name: e.target.value}))} />
+                    </div>
+
+                    {!isTent && !isTentInStore && (
+                      <div className="inv-form-group">
+                        <label>Barcode <span className="inv-label-hint">(optional)</span></label>
+                        <input className="inv-input" value={areaForm.barcode} placeholder="Barcode number"
+                          onChange={e => setAreaForm(f => ({...f, barcode: e.target.value}))} />
+                      </div>
+                    )}
+
+                    <div className="inv-form-row">
+                      {!isTent && !isTentInStore && (
+                        <div className="inv-form-group">
+                          <label>CTN / Qty <span className="inv-label-hint">(cartons)</span></label>
+                          <input className="inv-input" type="number" min="0" value={areaForm.quantity} placeholder="0"
+                            onChange={e => setAreaForm(f => ({...f, quantity: e.target.value}))} />
+                        </div>
+                      )}
+                      <div className="inv-form-group">
+                        <label>Pcs <span className="inv-label-hint">(pieces)</span></label>
+                        <input className="inv-input" type="number" min="0" value={areaForm.pcs} placeholder="0"
+                          onChange={e => setAreaForm(f => ({...f, pcs: e.target.value}))} />
+                      </div>
+                    </div>
+
+                    {!isTent && !isTentInStore && (
+                      <div className="inv-form-group">
+                        <label>Size <span className="inv-label-hint">(optional, e.g. 300g, 1L)</span></label>
+                        <input className="inv-input" value={areaForm.size} placeholder="e.g. 300g, 1L"
+                          onChange={e => setAreaForm(f => ({...f, size: e.target.value}))} />
+                      </div>
+                    )}
+
+                    <div className="inv-form-group">
+                      <label>Price <span className="inv-label-hint">(optional)</span></label>
+                      <input className="inv-input" type="number" min="0" step="0.01" value={areaForm.price} placeholder="0.00"
+                        onChange={e => setAreaForm(f => ({...f, price: e.target.value}))} />
+                    </div>
+
+                    {!isTent && !isTentInStore && (
+                      <div className="inv-form-group">
+                        <label>Notes <span className="inv-label-hint">(optional)</span></label>
+                        <input className="inv-input" value={areaForm.notes} placeholder="Any extra notes"
+                          onChange={e => setAreaForm(f => ({...f, notes: e.target.value}))} />
+                      </div>
+                    )}
+
+                    <div className={isEdit ? "inv-edit-actions-row" : "inv-form-actions"}>
+                      {isEdit ? (
+                        <>
+                          <button className="inv-edit-cancel-btn" onClick={() => { setShowAreaAddModal(false); setEditingAreaItem(null); setAreaForm(AREA_FORM_BLANK); }} disabled={areaSaving}>Cancel</button>
+                          <button className="inv-edit-delete-btn" onClick={() => handleAreaDelete(editingAreaItem.id)} disabled={areaSaving}>Delete</button>
+                          <button className="inv-edit-update-btn" onClick={handleAreaUpdate} disabled={areaSaving}><Save size={15}/> {areaSaving ? 'Saving…' : 'Update'}</button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="inv-btn-cancel" onClick={() => { setShowAreaAddModal(false); setAreaForm(AREA_FORM_BLANK); }}>Cancel</button>
+                          <button className="inv-btn-save" onClick={handleAreaAdd} disabled={areaSaving}><Save size={16}/> {areaSaving ? 'Saving…' : 'Add Item'}</button>
+                        </>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            </Overlay>
+          </Portal>
+        );
+      })()}
 
       {/* ── Commission Modal ── */}
       {showCommissionModal && (
