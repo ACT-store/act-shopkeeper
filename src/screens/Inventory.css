@@ -1,5 +1,5 @@
 /* ============================================================
-   Inventory.css — A.C.T Inventory App
+   Inventory.css — ACT Shopkeeper App
    ============================================================ */
 
 .inventory {
@@ -223,13 +223,11 @@
   min-width: 44px;
   text-align: center !important;
   /* right border to visually separate from scrolling content */
-  border-right: 1px solid var(--border, #e0e0e0);
+  border-right: 2px solid var(--border, #e0e0e0);
 }
 
 .inv-col-name {
-  left: 44px;
   min-width: 160px;
-  border-right: 2px solid var(--border, #e0e0e0);
 }
 
 /* SIZE column — compact, right of the frozen name column */
@@ -948,7 +946,14 @@
   color: white;
 }
 
-/* ── Asset detail button ─────────────────────────────────────────── */
+/* ── Commission tab active style ── */
+.inv-tab-btn-active-commission {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #fff !important;
+  border-color: #059669 !important;
+}
+
+/* ── Asset detail button ── */
 .inv-detail-btn {
   background: none;
   border: 1.5px solid var(--border, #d1d5db);
@@ -965,9 +970,314 @@
   border-color: #667eea;
 }
 
-/* ── Commission tab active style ── */
-.inv-tab-btn-active-commission {
-  background: linear-gradient(135deg, #059669, #10b981) !important;
-  color: #fff !important;
-  border-color: #059669 !important;
+/* ─────────────────────────────────────────────────────────────
+   Edit row button (EDIT column in goods table)
+───────────────────────────────────────────────────────────── */
+.inv-edit-row-btn {
+  background: #f0f4ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 7px;
+  color: #4f46e5;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  padding: 0;
 }
+.inv-edit-row-btn:hover {
+  background: #e0e7ff;
+  border-color: #818cf8;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Edit Product Modal — close button in header
+───────────────────────────────────────────────────────────── */
+.inv-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  margin-left: auto;
+}
+.inv-modal-close:hover {
+  background: var(--background, #f3f4f6);
+  color: var(--text-primary, #111827);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Edit Product Modal — 3 inline action buttons
+   Order: [Cancel]  [Delete]  [Update]
+───────────────────────────────────────────────────────────── */
+.inv-edit-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.inv-edit-cancel-btn,
+.inv-edit-delete-btn,
+.inv-edit-update-btn {
+  flex: 1;
+  padding: 11px 8px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+.inv-edit-cancel-btn:disabled,
+.inv-edit-delete-btn:disabled,
+.inv-edit-update-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inv-edit-cancel-btn {
+  background: var(--surface, #f9fafb);
+  border: 1.5px solid var(--border, #d1d5db);
+  color: var(--text-secondary, #374151);
+}
+.inv-edit-cancel-btn:hover:not(:disabled) {
+  background: var(--background, #f3f4f6);
+}
+
+.inv-edit-delete-btn {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1.5px solid #fca5a5;
+}
+.inv-edit-delete-btn:hover:not(:disabled) {
+  background: #fecaca;
+}
+
+.inv-edit-update-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+.inv-edit-update-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+/* Dark mode for new elements */
+[data-theme="dark"] .inv-edit-row-btn {
+  background: rgba(102,126,234,0.15);
+  border-color: rgba(102,126,234,0.3);
+  color: #818cf8;
+}
+[data-theme="dark"] .inv-edit-row-btn:hover {
+  background: rgba(102,126,234,0.25);
+}
+[data-theme="dark"] .inv-edit-cancel-btn {
+  background: #2d3148;
+  border-color: #4b5563;
+  color: #d1d5db;
+}
+[data-theme="dark"] .inv-edit-cancel-btn:hover:not(:disabled) {
+  background: #363b56;
+}
+[data-theme="dark"] .inv-edit-delete-btn {
+  background: rgba(220,38,38,0.15);
+  color: #f87171;
+  border-color: rgba(220,38,38,0.3);
+}
+[data-theme="dark"] .inv-edit-delete-btn:hover:not(:disabled) {
+  background: rgba(220,38,38,0.25);
+}
+/* ══════════════════════════════════════════════════════════════
+   DB IMPORT — button, banner, confirm modal
+══════════════════════════════════════════════════════════════ */
+
+/* Import button — sits alongside Add Product / + Add */
+.inv-import-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1.5px solid #86efac;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.18s, border-color 0.18s;
+}
+.inv-import-btn:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #4ade80;
+}
+.inv-import-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+/* Assets tab — teal tint */
+.inv-import-btn-assets {
+  background: #f0fdfa;
+  color: #0f766e;
+  border-color: #5eead4;
+}
+.inv-import-btn-assets:hover:not(:disabled) {
+  background: #ccfbf1;
+  border-color: #2dd4bf;
+}
+/* Commission tab — purple tint */
+.inv-import-btn-commission {
+  background: #faf5ff;
+  color: #7c3aed;
+  border-color: #c4b5fd;
+}
+.inv-import-btn-commission:hover:not(:disabled) {
+  background: #ede9fe;
+  border-color: #a78bfa;
+}
+
+/* Dark mode */
+[data-theme="dark"] .inv-import-btn {
+  background: #052e16;
+  color: #4ade80;
+  border-color: #166534;
+}
+[data-theme="dark"] .inv-import-btn-assets {
+  background: #042f2e;
+  color: #2dd4bf;
+  border-color: #134e4a;
+}
+[data-theme="dark"] .inv-import-btn-commission {
+  background: #2e1065;
+  color: #c4b5fd;
+  border-color: #4c1d95;
+}
+
+/* ── Success banner ── */
+.inv-import-banner {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  background: #15803d;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  animation: inv-banner-slide-in 0.25s ease;
+}
+@keyframes inv-banner-slide-in {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+.inv-import-banner-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+.inv-import-banner-close:hover { opacity: 1; }
+
+/* ── Confirm modal ── */
+.inv-import-confirm-dialog {
+  background: var(--surface, white);
+  border-radius: 18px;
+  padding: 24px 20px 20px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.22);
+}
+.inv-import-confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary, #111);
+  margin-bottom: 10px;
+}
+.inv-import-confirm-filename {
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  background: var(--surface-alt, #f9fafb);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 16px;
+  word-break: break-all;
+}
+.inv-import-confirm-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.inv-import-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 6px;
+  border-radius: 12px;
+  background: var(--surface-alt, #f9fafb);
+  border: 1.5px solid var(--border, #e5e7eb);
+}
+.inv-import-stat-total { border-color: #d1d5db; }
+.inv-import-stat-new   { border-color: #86efac; background: #f0fdf4; }
+.inv-import-stat-skip  { border-color: #fed7aa; background: #fff7ed; }
+.inv-import-stat-num {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-primary, #111);
+}
+.inv-import-stat-new .inv-import-stat-num   { color: #15803d; }
+.inv-import-stat-skip .inv-import-stat-num  { color: #ea580c; }
+.inv-import-stat-lbl {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+  margin-top: 3px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.inv-import-confirm-note {
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.5;
+  margin: 0 0 18px;
+  text-align: center;
+}
+
+[data-theme="dark"] .inv-import-confirm-dialog   { background: #1a1d27; }
+[data-theme="dark"] .inv-import-confirm-filename { background: #0f1117; border-color: #2d3148; color: #9ca3af; }
+[data-theme="dark"] .inv-import-stat             { background: #0f1117; border-color: #2d3148; }
+[data-theme="dark"] .inv-import-stat-new         { background: #052e16; border-color: #166534; }
+[data-theme="dark"] .inv-import-stat-skip        { background: #431407; border-color: #9a3412; }
+[data-theme="dark"] .inv-import-stat-num         { color: #e2e8f0; }
+[data-theme="dark"] .inv-import-stat-new .inv-import-stat-num  { color: #4ade80; }
+[data-theme="dark"] .inv-import-stat-skip .inv-import-stat-num { color: #fb923c; }
+[data-theme="dark"] .inv-import-banner { background: #166534; }
