@@ -1993,15 +1993,6 @@ function CashRecord() {
               <div className="filter-modal-handle"/>
               <div className="filter-modal-title">Filter Entries</div>
             <div className="cj-filter-group">
-              <label>Entry Type</label>
-              <div className="cj-filter-buttons">
-                {[['all','All Entries'],[TYPE_IN,'Cash In'],[TYPE_OUT,'Cash Out']].map(([val,lbl]) => (
-                  <button key={val} className={`cj-filter-btn${typeFilter===val?' active':''}`}
-                    onClick={() => setTypeFilter(val)}>{lbl}</button>
-                ))}
-              </div>
-            </div>
-            <div className="cj-filter-group">
               <label>Date Filter</label>
               <div className="cj-filter-buttons">
                 {[['today','Today'],['single','Single Date'],['range','Date Range']].map(([val,lbl]) => (
