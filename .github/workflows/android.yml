@@ -72,8 +72,12 @@ jobs:
             '    <color name="appBackground">#0d2e18</color>' \
             '</resources>' > android/app/src/main/res/values-night/colors.xml
 
-          # styles.xml — override AppTheme windowBackground so the very first native
-          # frame Android draws before the WebView paints is login green, not purple/white
+          # styles.xml — define ALL styles referenced in AndroidManifest.xml
+          # AndroidManifest references two styles:
+          #   @style/AppTheme              — on <application>
+          #   @style/AppTheme.NoActionBarLaunch — on <activity> (launch screen)
+          # Both must exist or AAPT resource linking fails at build time.
+          # windowBackground on all = login green so no purple/white flash ever.
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
             '<resources>' \
             '    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">' \
@@ -83,6 +87,15 @@ jobs:
             '        <item name="colorPrimary">@color/colorPrimary</item>' \
             '        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>' \
             '        <item name="colorAccent">@color/colorAccent</item>' \
+            '    </style>' \
+            '    <style name="AppTheme.NoActionBar">' \
+            '        <item name="android:windowBackground">@color/appBackground</item>' \
+            '        <item name="windowNoTitle">true</item>' \
+            '        <item name="windowActionBar">false</item>' \
+            '    </style>' \
+            '    <style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar">' \
+            '        <item name="android:windowBackground">@color/appBackground</item>' \
+            '        <item name="android:windowIsTranslucent">false</item>' \
             '    </style>' \
             '</resources>' > android/app/src/main/res/values/styles.xml
 
