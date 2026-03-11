@@ -335,7 +335,7 @@
 
 /* ── Read-only cell value span ── */
 .inv-cell-value {
-  display: block;
+  display: inline;
   white-space: nowrap;
 }
 
