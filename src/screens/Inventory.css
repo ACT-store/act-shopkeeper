@@ -226,8 +226,9 @@
 }
 
 .inv-col-name {
-  left: 44px;
+  left: 0;
   min-width: 160px;
+  padding-left: 48px !important;   /* text starts after the # column */
   border-right: 2px solid var(--border, #e0e0e0);
 }
 
@@ -981,6 +982,16 @@
   color: #fff !important;
   border-color: #059669 !important;
 }
+
+.inv-tab-btn-active-singles {
+  background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
+  color: #fff !important;
+  border-color: #7c3aed !important;
+}
+
+/* NAME column frozen behind # — lower z-index so # paints on top */
+td.inv-col-name.inv-col-frozen { z-index: 8; }
+th.inv-col-name.inv-col-frozen { z-index: 28; }
 
 /* ── Asset detail button ── */
 .inv-detail-btn {
