@@ -905,8 +905,7 @@ function Inventory() {
                     <th className="inv-col-right">PRICE</th>
                     <th className="inv-col-center">STOCK</th>
                     <th>STATUS</th>
-                    <th className="inv-col-barcode-no">BARCODE NO.</th>
-                    <th className="inv-col-center">BARCODE IMG</th>
+                    <th className="inv-col-barcode-no">BARCODE</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -937,14 +936,7 @@ function Inventory() {
                             <span className="inv-barcode-number">{good.barcode}</span>
                           ) : <span className="inv-barcode-none">—</span>}
                         </td>
-                        <td className="inv-col-center">
-                          {barcodeImgUrl ? (
-                            <button className="inv-barcode-thumb-btn"
-                              onClick={() => setLightboxSrc(barcodeImgUrl)} title="View barcode image">
-                              <ZoomIn size={18} strokeWidth={1.8} />
-                            </button>
-                          ) : <span className="inv-barcode-none">—</span>}
-                        </td>
+
                       </tr>
                     );
                   })}
@@ -1053,7 +1045,7 @@ function Inventory() {
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
                     <th className="inv-col-name">NAME</th>
-                    {!isTent && !isTentInStore && <th className="inv-col-barcode-no">BARCODE NO.</th>}
+                    {!isTent && !isTentInStore && <th className="inv-col-barcode-no">BARCODE</th>}
                     {!isTent && !isTentInStore && <th className="inv-col-center">CTN / QTY</th>}
                     <th className="inv-col-center">PCS</th>
                     {!isTent && !isTentInStore && <th>SIZE</th>}
