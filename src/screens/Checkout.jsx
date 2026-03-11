@@ -44,7 +44,7 @@ function Checkout() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [repaymentDate, setRepaymentDate] = useState('');
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
-  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState({ cash: false, ib: false, mpaisa: false });
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState({ cash: true, ib: false, mpaisa: false });
   const [showCashPopup, setShowCashPopup] = useState(false);
   const [showChangeCalc, setShowChangeCalc] = useState(false);  // child modal inside cash confirm
   const [customerMoney, setCustomerMoney] = useState('');       // raw input from customer
@@ -427,7 +427,7 @@ function Checkout() {
   const handlePayCash = () => {
     if (catalogue.length === 0) { alert('Cart is empty.'); return; }
     // Step 1: show payment method selector
-    setSelectedPaymentMethods({ cash: false, ib: false, mpaisa: false });
+    setSelectedPaymentMethods({ cash: true, ib: false, mpaisa: false });
     setShowPaymentMethodModal(true);
   };
 
@@ -768,32 +768,43 @@ function Checkout() {
 
       {/* ── Payment Method modal ── */}
       {showPaymentMethodModal && (() => {
-        const { cash, ib, mpaisa } = selectedPaymentMethods;
-        const toggle = (key) => setSelectedPaymentMethods(prev => ({ ...prev, [key]: !prev[key] }));
+        const select = (key) => setSelectedPaymentMethods({ cash: false, ib: false, mpaisa: false, [key]: true });
         return (
           <div className="sr-modal-overlay">
             <div className="sr-modal-content" style={{ maxWidth: '320px' }}>
               <h2 style={{ marginBottom: '6px' }}>Payment Method</h2>
-              <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '18px' }}>Select all that apply:</p>
-              {[['cash', '💵 Cash'], ['ib', '🏦 IB'], ['mpaisa', '📱 MPAiSA']].map(([key, label]) => (
-                <label key={key} onClick={() => toggle(key)} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '12px 14px', marginBottom: '8px', borderRadius: '10px', cursor: 'pointer',
-                  border: `2px solid ${selectedPaymentMethods[key] ? '#667eea' : '#e5e7eb'}`,
-                  background: selectedPaymentMethods[key] ? '#eef2ff' : 'var(--surface)',
-                  transition: 'all 0.15s',
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedPaymentMethods[key]}
-                    onChange={() => toggle(key)}
-                    style={{ width: '18px', height: '18px', accentColor: '#667eea', cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '15px', fontWeight: 600, color: selectedPaymentMethods[key] ? '#4338ca' : '#374151' }}>
-                    {label}
-                  </span>
-                </label>
-              ))}
+              <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '18px' }}>Select one:</p>
+              {[['cash', '💵 Cash'], ['ib', '🏦 IB'], ['mpaisa', '📱 MPAiSA']].map(([key, label]) => {
+                const isSelected = selectedPaymentMethods[key];
+                return (
+                  <div key={key} onClick={() => select(key)} style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '12px 14px', marginBottom: '8px', borderRadius: '10px', cursor: 'pointer',
+                    border: `2px solid ${isSelected ? '#667eea' : '#e5e7eb'}`,
+                    background: isSelected ? '#eef2ff' : 'var(--surface)',
+                    transition: 'all 0.15s',
+                    userSelect: 'none',
+                  }}>
+                    {/* Custom tick box */}
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
+                      border: `2px solid ${isSelected ? '#667eea' : '#d1d5db'}`,
+                      background: isSelected ? '#667eea' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.15s',
+                    }}>
+                      {isSelected && (
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                          <polyline points="2,7 5,10 11,3" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '15px', fontWeight: 600, color: isSelected ? '#4338ca' : '#374151' }}>
+                      {label}
+                    </span>
+                  </div>
+                );
+              })}
               <div className="sr-modal-buttons" style={{ marginTop: '20px' }}>
                 <button className="sr-btn-cancel" onClick={() => setShowPaymentMethodModal(false)}>Cancel</button>
                 <button className="sr-btn-confirm" onClick={confirmPaymentMethod}>OK</button>
