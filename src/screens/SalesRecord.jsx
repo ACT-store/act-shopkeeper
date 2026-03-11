@@ -91,11 +91,16 @@ function SaleDetailModal({ sale, onClose, onEdit, canEdit, fmt }) {
   const dateStr = d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
   const timeStr = d ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
 
-  const payBadgeStyle = {
-    cash:   { background: '#d1fae5', color: '#065f46' },
-    credit: { background: '#fee2e2', color: '#991b1b' },
-    mixed:  { background: '#fef3c7', color: '#92400e' },
-  }[payType] || { background: '#f3f4f6', color: '#374151' };
+  const payBadgeStyle = (() => {
+    if (payType === 'cash')   return { background: '#d1fae5', color: '#065f46' };
+    if (payType === 'credit') return { background: '#fee2e2', color: '#991b1b' };
+    if (payType === 'mixed')  return { background: '#fef3c7', color: '#92400e' };
+    if (payType === 'ib')     return { background: '#dbeafe', color: '#1e40af' };
+    if (payType === 'mpaisa') return { background: '#ede9fe', color: '#5b21b6' };
+    // Combined types like 'cash+ib', 'cash+mpaisa', 'ib+mpaisa', 'cash+ib+mpaisa'
+    if (payType.includes('+')) return { background: '#fef9c3', color: '#713f12' };
+    return { background: '#f3f4f6', color: '#374151' };
+  })();
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
@@ -186,7 +191,9 @@ function SaleDetailModal({ sale, onClose, onEdit, canEdit, fmt }) {
           <div style={{ fontSize:'12px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', marginBottom:'6px' }}>Payment</div>
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
             <span style={{ ...payBadgeStyle, padding:'4px 12px', borderRadius:'6px', fontSize:'13px', fontWeight:700 }}>
-              {payType ? payType.toUpperCase() : 'N/A'}
+              {payType
+                ? payType.split('+').map(p => p === 'mpaisa' ? 'MPAiSA' : p.toUpperCase()).join(' + ')
+                : 'N/A'}
             </span>
           </div>
           {(payType === 'cash' || payType === 'mixed') && cashReceived > 0 && (
@@ -537,11 +544,11 @@ function SalesRecord() {
   const applyFilters = () => {
     let filtered = [...sales];
     if (appliedPaymentFilter !== 'all')
-      filtered = filtered.filter(s =>
-        s.payment_type === appliedPaymentFilter ||
-        s.paymentType === appliedPaymentFilter ||
-        s.paymentMethod === appliedPaymentFilter
-      );
+      filtered = filtered.filter(s => {
+        const pt = s.payment_type || s.paymentType || s.paymentMethod || '';
+        // Exact match (e.g. 'cash', 'ib', 'mpaisa') or combo contains the method (e.g. 'cash+ib')
+        return pt === appliedPaymentFilter || pt.split('+').includes(appliedPaymentFilter);
+      });
     const today    = toMidnight(new Date());
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
     if (appliedDateFilter === 'today')
@@ -600,7 +607,7 @@ function SalesRecord() {
   };
 
   const getTableTitle = () => {
-    const payMap = { all: 'All Sales', cash: 'Cash Sales', credit: 'Credit Sales', mixed: 'Mixed Sales' };
+    const payMap = { all: 'All Sales', cash: 'Cash Sales', ib: 'IB Sales', mpaisa: 'MPAiSA Sales', credit: 'Credit Sales', mixed: 'Mixed Sales' };
     const label  = payMap[appliedPaymentFilter] || 'All Sales';
     if (appliedDateFilter === 'today') return `${label} Today`;
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
@@ -649,7 +656,7 @@ function SalesRecord() {
           <div className="filter-group">
             <label>Payment Type</label>
             <div className="filter-buttons">
-              {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only'], ['mixed', 'Mixed']].map(([val, lbl]) => (
+              {[['all', 'All Sales'], ['cash', 'Cash'], ['ib', 'IB'], ['mpaisa', 'MPAiSA'], ['credit', 'Credit'], ['mixed', 'Mixed']].map(([val, lbl]) => (
                 <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
                   onClick={() => setPaymentFilter(val)}>{lbl}</button>
               ))}
@@ -707,7 +714,7 @@ function SalesRecord() {
               <div className="filter-group">
                 <label>Payment Type</label>
                 <div className="filter-buttons">
-                {[['all', 'All Sales'], ['cash', 'Cash Only'], ['credit', 'Credit Only'], ['mixed', 'Mixed']].map(([val, lbl]) => (
+                {[['all', 'All Sales'], ['cash', 'Cash'], ['ib', 'IB'], ['mpaisa', 'MPAiSA'], ['credit', 'Credit'], ['mixed', 'Mixed']].map(([val, lbl]) => (
                     <button key={val} className={`filter-btn${paymentFilter === val ? ' active' : ''}`}
                     onClick={() => setPaymentFilter(val)}>{lbl}</button>
                 ))}
@@ -841,8 +848,10 @@ function SalesRecord() {
                           ) : sale.status === 'refunded' ? (
                             <span style={{ fontSize:'11px', background:'#fef3c7', color:'#d97706', padding:'2px 6px', borderRadius:'4px', fontWeight:700 }}>REFUND</span>
                           ) : (
-                            <span className={`payment-badge payment-${payType}`}>
-                              {payType ? payType.toUpperCase() : 'N/A'}
+                            <span className={`payment-badge payment-${payType.split('+')[0]}`}>
+                              {payType
+                                ? payType.split('+').map(p => p === 'mpaisa' ? 'MPAiSA' : p.toUpperCase()).join(' + ')
+                                : 'N/A'}
                             </span>
                           )}
                         </td>
