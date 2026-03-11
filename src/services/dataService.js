@@ -738,6 +738,7 @@ class DataService {
       total_amount: parseFloat(sale.total),
       paymentType: sale.paymentType,
       payment_type: sale.paymentType,
+      paymentMethod: sale.paymentType,
       customerName: sale.customerName || '',
       customer_name: sale.customerName || '',
       customerPhone: sale.customerPhone || '',
