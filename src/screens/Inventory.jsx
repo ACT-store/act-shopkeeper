@@ -905,7 +905,8 @@ function Inventory() {
                     <th className="inv-col-right">PRICE</th>
                     <th className="inv-col-center">STOCK</th>
                     <th>STATUS</th>
-                    <th className="inv-col-center">BARCODE</th>
+                    <th className="inv-col-barcode-no">BARCODE NO.</th>
+                    <th className="inv-col-center">BARCODE IMG</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -930,6 +931,11 @@ function Inventory() {
                         </td>
                         <td>
                           {status ? <span className={`inv-badge ${status.cls}`}>{status.label}</span> : '—'}
+                        </td>
+                        <td className="inv-col-barcode-no inv-barcode-no-cell">
+                          {good.barcode ? (
+                            <span className="inv-barcode-number">{good.barcode}</span>
+                          ) : <span className="inv-barcode-none">—</span>}
                         </td>
                         <td className="inv-col-center">
                           {barcodeImgUrl ? (
@@ -1047,7 +1053,7 @@ function Inventory() {
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
                     <th className="inv-col-name">NAME</th>
-                    {!isTent && !isTentInStore && <th>BARCODE</th>}
+                    {!isTent && !isTentInStore && <th className="inv-col-barcode-no">BARCODE NO.</th>}
                     {!isTent && !isTentInStore && <th className="inv-col-center">CTN / QTY</th>}
                     <th className="inv-col-center">PCS</th>
                     {!isTent && !isTentInStore && <th>SIZE</th>}
@@ -1064,7 +1070,11 @@ function Inventory() {
                         <span className="inv-cell-value">{item.name || '—'}</span>
                       </td>
                       {!isTent && !isTentInStore && (
-                        <td className="inv-cat-cell">{item.barcode || '—'}</td>
+                        <td className="inv-col-barcode-no inv-barcode-no-cell">
+                          {item.barcode
+                            ? <span className="inv-barcode-number">{item.barcode}</span>
+                            : <span className="inv-barcode-none">—</span>}
+                        </td>
                       )}
                       {!isTent && !isTentInStore && (
                         <td className="inv-col-center">
