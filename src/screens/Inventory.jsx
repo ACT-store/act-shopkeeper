@@ -155,18 +155,25 @@ function ImageCropper({ src, onCrop, onCancel }) {
 /* ─────────────────────────────────────────────────────────────
    Category Select
 ───────────────────────────────────────────────────────────── */
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   'Baked Goods', 'Batteries', 'Beverages', 'Canned Food',
   'Cleaning Supplies', 'Clothes', 'Dairy', 'Fresh Meats',
   'Hardware', 'Personal Care', 'Pet Supplies', 'Produce',
   'Sewing Supplies', 'Snacks', 'Spices', 'Tobacco', 'Toiletries',
 ];
 
-function CategorySelect({ value, onChange }) {
+const DEFAULT_STORAGE_AREAS = [
+  { key: 'container',     label: 'Container',     emoji: '📦', pcsOnly: false },
+  { key: 'storeroom',     label: 'Storeroom',     emoji: '🗄️', pcsOnly: false },
+  { key: 'tent',          label: 'Tent',          emoji: '⛺', pcsOnly: true  },
+  { key: 'tent_in_store', label: 'Tent in Store', emoji: '🧺', pcsOnly: true  },
+];
+
+function CategorySelect({ value, onChange, categories }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const wrapperRef = useRef(null);
-  const filtered = CATEGORIES.filter(c => c.toLowerCase().includes(search.toLowerCase()));
+  const filtered = (categories || DEFAULT_CATEGORIES).filter(c => c.toLowerCase().includes(search.toLowerCase()));
 
   useEffect(() => {
     const handler = (e) => {
@@ -270,7 +277,7 @@ async function captureImage(source = 'camera') {
 /* ─────────────────────────────────────────────────────────────
    Edit Product Modal
 ───────────────────────────────────────────────────────────── */
-function EditProductModal({ good, onUpdate, onDelete, onCancel }) {
+function EditProductModal({ good, onUpdate, onDelete, onCancel, categories }) {
   const [form, setForm] = useState({
     name:           good.name           || '',
     size:           good.size           || '',
@@ -356,7 +363,7 @@ function EditProductModal({ good, onUpdate, onDelete, onCancel }) {
 
                 <div className="inv-form-group">
                   <label>Category *</label>
-                  <CategorySelect value={form.category} onChange={val => setForm(p => ({ ...p, category: val }))} />
+                  <CategorySelect value={form.category} onChange={val => setForm(p => ({ ...p, category: val }))} categories={categories} />
                 </div>
 
                 <div className="inv-form-row">
@@ -478,8 +485,21 @@ function Inventory() {
   // Asset detail modal
   const [assetDetailItem, setAssetDetailItem] = useState(null);
 
-  // ── Storage-area tabs: Container / Storeroom / Tent / Tent-in-Store / Singles ─
-  const AREA_TABS = ['container', 'storeroom', 'tent', 'tent_in_store', 'singles'];
+  // ── Catalogue settings (categories + storage areas from Firestore) ──────────
+  const [catalogueCategories, setCatalogueCategories] = useState(DEFAULT_CATEGORIES);
+  const [catalogueAreas,      setCatalogueAreas]      = useState(DEFAULT_STORAGE_AREAS);
+
+  useEffect(() => {
+    dataService.getCatalogueSettings().then(cs => {
+      if (!cs) return;
+      if (Array.isArray(cs.categories)   && cs.categories.length)   setCatalogueCategories(cs.categories);
+      if (Array.isArray(cs.storageAreas) && cs.storageAreas.length) setCatalogueAreas(cs.storageAreas);
+    });
+  }, []);
+
+  // ── Storage-area tabs: driven by catalogue settings ───────────────────────
+  // 'singles' is a shopkeeper-only special tab — always appended
+  const AREA_TABS = [...catalogueAreas.map(a => a.key), 'singles'];
   const [areaItems,   setAreaItems]   = useState({});
   const [areaLoading, setAreaLoading] = useState({});
   const [areaLastSynced, setAreaLastSynced] = useState({});
@@ -593,7 +613,7 @@ function Inventory() {
           }
           await loadAreaItems('singles');
         } else {
-          const destUsesPcs = moveDestTab === 'tent' || moveDestTab === 'tent_in_store';
+          const destUsesPcs = catalogueAreas.find(a => a.key === moveDestTab)?.pcsOnly ?? false;
           const destField   = destUsesPcs ? 'pcs' : 'quantity';
           const destItems   = await dataService.getAreaItems(moveDestTab);
           const match = (destItems || []).find(
@@ -622,8 +642,8 @@ function Inventory() {
     }
 
     // ── Moving FROM a storage area ────────────────────────────────────────
-    const srcUsesPcs  = moveSourceTab === 'tent' || moveSourceTab === 'tent_in_store';
-    const destUsesPcs = moveDestTab   === 'tent' || moveDestTab   === 'tent_in_store';
+    const srcUsesPcs  = catalogueAreas.find(a => a.key === moveSourceTab)?.pcsOnly ?? false;
+    const destUsesPcs = catalogueAreas.find(a => a.key === moveDestTab)?.pcsOnly ?? false;
     const srcField    = srcUsesPcs  ? 'pcs' : 'quantity';
     const destField   = destUsesPcs ? 'pcs' : 'quantity';
     const currentSrc  = parseInt(moveItem[srcField] || 0, 10);
@@ -863,35 +883,26 @@ function Inventory() {
           onUpdate={handleUpdateGood}
           onDelete={handleDeleteGood}
           onCancel={() => setEditingGood(null)}
+          categories={catalogueCategories}
         />
       )}
 
       {/* ── Sticky bar ── */}
       <div className="inv-sticky-bar">
         <div className="inv-tab-row">
-          <button
-            className={`inv-tab-btn${activeTab === 'goods' ? ' inv-tab-btn-active' : ''}`}
-            onClick={() => handleTabChange('goods')}
-          >
-            🏪 Front Store
-          </button>
-          <button className={`inv-tab-btn${activeTab === 'container'     ? ' inv-tab-btn-active inv-tab-btn-active-container'   : ''}`} onClick={() => handleTabChange('container')}>📦 Container</button>
-          <button className={`inv-tab-btn${activeTab === 'storeroom'     ? ' inv-tab-btn-active inv-tab-btn-active-storeroom'   : ''}`} onClick={() => handleTabChange('storeroom')}>🗄️ Storeroom</button>
-          <button className={`inv-tab-btn${activeTab === 'tent'          ? ' inv-tab-btn-active inv-tab-btn-active-tent'        : ''}`} onClick={() => handleTabChange('tent')}>⛺ Tent</button>
-          <button className={`inv-tab-btn${activeTab === 'tent_in_store' ? ' inv-tab-btn-active inv-tab-btn-active-tent-in-store' : ''}`} onClick={() => handleTabChange('tent_in_store')}>🧺 Tent in Store</button>
-          <button className={`inv-tab-btn${activeTab === 'singles'       ? ' inv-tab-btn-active inv-tab-btn-active-singles'     : ''}`} onClick={() => handleTabChange('singles')}>🔢 Singles</button>
-          <button
-            className={`inv-tab-btn${activeTab === 'assets' ? ' inv-tab-btn-active inv-tab-btn-active-assets' : ''}`}
-            onClick={() => handleTabChange('assets')}
-          >
-            🔧 Operational Assets
-          </button>
-          <button
-            className={`inv-tab-btn${activeTab === 'commission' ? ' inv-tab-btn-active inv-tab-btn-active-commission' : ''}`}
-            onClick={() => handleTabChange('commission')}
-          >
-            🤝 Commission
-          </button>
+          <button className={`inv-tab-btn${activeTab === 'goods'      ? ' inv-tab-btn-active'                              : ''}`} onClick={() => handleTabChange('goods')}>🏪 Front Store</button>
+          {catalogueAreas.map(area => (
+            <button
+              key={area.key}
+              className={`inv-tab-btn${activeTab === area.key ? ` inv-tab-btn-active inv-tab-btn-active-${area.key}` : ''}`}
+              onClick={() => handleTabChange(area.key)}
+            >
+              {area.emoji} {area.label}
+            </button>
+          ))}
+          <button className={`inv-tab-btn${activeTab === 'singles'    ? ' inv-tab-btn-active inv-tab-btn-active-singles'   : ''}`} onClick={() => handleTabChange('singles')}>🔢 Singles</button>
+          <button className={`inv-tab-btn${activeTab === 'assets'     ? ' inv-tab-btn-active inv-tab-btn-active-assets'    : ''}`} onClick={() => handleTabChange('assets')}>🔧 Operational Assets</button>
+          <button className={`inv-tab-btn${activeTab === 'commission' ? ' inv-tab-btn-active inv-tab-btn-active-commission': ''}`} onClick={() => handleTabChange('commission')}>🤝 Commission</button>
         </div>
 
         {activeTab === 'goods' && (
@@ -912,30 +923,11 @@ function Inventory() {
             <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Products sold on behalf of others. Shop earns a commission per sale.</div>
           </div>
         )}
-        {activeTab === 'container' && (
-          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
-            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>📦 Container</div>
-            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Stock stored in the container. Tracks cartons, pieces, size and price.</div>
+        {catalogueAreas.map(area => activeTab === area.key && (
+          <div key={area.key} style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>{area.emoji} {area.label}</div>
           </div>
-        )}
-        {activeTab === 'storeroom' && (
-          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
-            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>🗄️ Storeroom</div>
-            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Stock held in the storeroom.</div>
-          </div>
-        )}
-        {activeTab === 'tent' && (
-          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
-            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>⛺ Tent</div>
-            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Items displayed and sold from the tent.</div>
-          </div>
-        )}
-        {activeTab === 'tent_in_store' && (
-          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
-            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>🧺 Tent in Store</div>
-            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Tent stock stored inside the building.</div>
-          </div>
-        )}
+        ))}
 
         <div className="inv-toolbar">
           <div className="inv-search-box">
@@ -944,14 +936,13 @@ function Inventory() {
               type="text"
               className="inv-search-input"
               placeholder={
-                activeTab === 'goods'         ? 'Search Front Store Product' :
-                activeTab === 'assets'        ? 'Search Asset'               :
-                activeTab === 'commission'    ? 'Search Commission Product'   :
-                activeTab === 'singles'       ? 'Search Singles'              :
-                activeTab === 'container'     ? 'Search Container Items'      :
-                activeTab === 'storeroom'     ? 'Search Storeroom Items'      :
-                activeTab === 'tent'          ? 'Search Tent Items'           :
-                activeTab === 'tent_in_store' ? 'Search Tent in Store Items'  : 'Search'
+                activeTab === 'goods'      ? 'Search Front Store Product' :
+                activeTab === 'assets'     ? 'Search Asset'               :
+                activeTab === 'commission' ? 'Search Commission Product'   :
+                activeTab === 'singles'    ? 'Search Singles'              :
+                catalogueAreas.find(a => a.key === activeTab)
+                  ? `Search ${catalogueAreas.find(a => a.key === activeTab).label} Items`
+                  : 'Search'
               }
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -1152,8 +1143,7 @@ function Inventory() {
             : tabItems;
           const loading  = areaLoading[activeTab];
 
-          const isTent        = activeTab === 'tent';
-          const isTentInStore = activeTab === 'tent_in_store';
+          const pcsOnly = catalogueAreas.find(a => a.key === activeTab)?.pcsOnly ?? false;
 
           if (loading) return <div className="inv-empty">Loading…</div>;
           if (filtered.length === 0) return (
@@ -1171,12 +1161,12 @@ function Inventory() {
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
                     <th className="inv-col-frozen inv-col-name">NAME</th>
-                    {!isTent && !isTentInStore && <th className="inv-col-barcode-no">BARCODE</th>}
-                    {!isTent && !isTentInStore && <th className="inv-col-center">CTN / QTY</th>}
+                    {!pcsOnly && <th className="inv-col-barcode-no">BARCODE</th>}
+                    {!pcsOnly && <th className="inv-col-center">CTN / QTY</th>}
                     <th className="inv-col-center">PCS</th>
-                    {!isTent && !isTentInStore && <th>SIZE</th>}
+                    {!pcsOnly && <th>SIZE</th>}
                     <th className="inv-col-right">PRICE</th>
-                    {!isTent && !isTentInStore && <th>NOTES</th>}
+                    {!pcsOnly && <th>NOTES</th>}
                     <th className="inv-col-center">EDIT</th>
                   </tr>
                 </thead>
@@ -1187,14 +1177,14 @@ function Inventory() {
                       <td className="inv-col-frozen inv-col-name inv-name-cell">
                         <span className="inv-cell-value">{item.name || '—'}</span>
                       </td>
-                      {!isTent && !isTentInStore && (
+                      {!pcsOnly && (
                         <td className="inv-col-barcode-no inv-barcode-no-cell">
                           {item.barcode
                             ? <span className="inv-barcode-number">{item.barcode}</span>
                             : <span className="inv-barcode-none">—</span>}
                         </td>
                       )}
-                      {!isTent && !isTentInStore && (
+                      {!pcsOnly && (
                         <td className="inv-col-center">
                           <span className="inv-cell-value">{item.quantity ?? '—'}</span>
                         </td>
@@ -1202,7 +1192,7 @@ function Inventory() {
                       <td className="inv-col-center">
                         <span className="inv-cell-value">{item.pcs ?? '—'}</span>
                       </td>
-                      {!isTent && !isTentInStore && (
+                      {!pcsOnly && (
                         <td className="inv-size-cell">
                           <span className="inv-cell-value">{item.size || '—'}</span>
                         </td>
@@ -1210,7 +1200,7 @@ function Inventory() {
                       <td className="inv-col-right">
                         <span className="inv-cell-value">{item.price != null && item.price !== '' ? fmt(parseFloat(item.price)) : '—'}</span>
                       </td>
-                      {!isTent && !isTentInStore && (
+                      {!pcsOnly && (
                         <td className="inv-cat-cell" style={{ maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                           {item.notes || '—'}
                         </td>
@@ -1376,21 +1366,16 @@ function Inventory() {
 
       {/* ── Area Item Add / Edit Modal ── */}
       {showAreaAddModal && (() => {
-        const isTent        = activeTab === 'tent';
-        const isTentInStore = activeTab === 'tent_in_store';
-        const areaLabels    = {
-          container:     '📦 Container',
-          storeroom:     '🗄️ Storeroom',
-          tent:          '⛺ Tent',
-          tent_in_store: '🧺 Tent in Store',
-        };
+        const pcsOnly    = catalogueAreas.find(a => a.key === activeTab)?.pcsOnly ?? false;
+        const activeArea = catalogueAreas.find(a => a.key === activeTab);
+        const areaTitle  = activeArea ? `${activeArea.emoji} ${activeArea.label}` : activeTab;
         const isEdit = !!editingAreaItem;
         return (
           <Portal>
             <Overlay className="inv-modal-overlay" onDismiss={() => { setShowAreaAddModal(false); setEditingAreaItem(null); setAreaForm(AREA_FORM_BLANK); }}>
               <div className="inv-modal-content" onPointerDown={e => e.stopPropagation()}>
                 <div className="inv-modal-header">
-                  <h2>{isEdit ? 'Edit' : 'Add'} — {areaLabels[activeTab]}</h2>
+                  <h2>{isEdit ? 'Edit' : 'Add'} — {areaTitle}</h2>
                   <button className="inv-modal-close" onClick={() => { setShowAreaAddModal(false); setEditingAreaItem(null); setAreaForm(AREA_FORM_BLANK); }}><X size={20}/></button>
                 </div>
                 <div className="inv-modal-body">
@@ -1402,7 +1387,7 @@ function Inventory() {
                         onChange={e => setAreaForm(f => ({...f, name: e.target.value}))} />
                     </div>
 
-                    {!isTent && !isTentInStore && (
+                    {!pcsOnly && (
                       <div className="inv-form-group">
                         <label>Barcode <span className="inv-label-hint">(optional)</span></label>
                         <input className="inv-input" value={areaForm.barcode} placeholder="Barcode number"
@@ -1411,7 +1396,7 @@ function Inventory() {
                     )}
 
                     <div className="inv-form-row">
-                      {!isTent && !isTentInStore && (
+                      {!pcsOnly && (
                         <div className="inv-form-group">
                           <label>CTN / Qty <span className="inv-label-hint">(cartons)</span></label>
                           <input className="inv-input" type="number" min="0" value={areaForm.quantity} placeholder="0"
@@ -1425,7 +1410,7 @@ function Inventory() {
                       </div>
                     </div>
 
-                    {!isTent && !isTentInStore && (
+                    {!pcsOnly && (
                       <div className="inv-form-group">
                         <label>Size <span className="inv-label-hint">(optional, e.g. 300g, 1L)</span></label>
                         <input className="inv-input" value={areaForm.size} placeholder="e.g. 300g, 1L"
@@ -1439,7 +1424,7 @@ function Inventory() {
                         onChange={e => setAreaForm(f => ({...f, price: e.target.value}))} />
                     </div>
 
-                    {!isTent && !isTentInStore && (
+                    {!pcsOnly && (
                       <div className="inv-form-group">
                         <label>Notes <span className="inv-label-hint">(optional)</span></label>
                         <input className="inv-input" value={areaForm.notes} placeholder="Any extra notes"
@@ -1543,7 +1528,7 @@ function Inventory() {
         const destOptions = isGoodsSource
           ? AREA_TABS  // container, storeroom, tent, tent_in_store, singles
           : AREA_TABS.filter(t => t !== moveSourceTab);
-        const srcUsesPcs = !isGoodsSource && (moveSourceTab === 'tent' || moveSourceTab === 'tent_in_store');
+        const srcUsesPcs = !isGoodsSource && (catalogueAreas.find(a => a.key === moveSourceTab)?.pcsOnly ?? false);
         const srcField   = isGoodsSource ? 'stock_quantity' : (srcUsesPcs ? 'pcs' : 'quantity');
 
         return (
