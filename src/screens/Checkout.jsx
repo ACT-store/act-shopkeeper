@@ -43,6 +43,8 @@ function Checkout() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [repaymentDate, setRepaymentDate] = useState('');
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState({ cash: false, ib: false, mpaisa: false });
   const [showCashPopup, setShowCashPopup] = useState(false);
   const [showChangeCalc, setShowChangeCalc] = useState(false);  // child modal inside cash confirm
   const [customerMoney, setCustomerMoney] = useState('');       // raw input from customer
@@ -424,8 +426,25 @@ function Checkout() {
   // ── Cash payment ───────────────────────────────────────────────────────
   const handlePayCash = () => {
     if (catalogue.length === 0) { alert('Cart is empty.'); return; }
+    // Step 1: show payment method selector
+    setSelectedPaymentMethods({ cash: false, ib: false, mpaisa: false });
+    setShowPaymentMethodModal(true);
+  };
+
+  const confirmPaymentMethod = () => {
+    const { cash, ib, mpaisa } = selectedPaymentMethods;
+    if (!cash && !ib && !mpaisa) { alert('Please select at least one payment method.'); return; }
+    setShowPaymentMethodModal(false);
+    // Step 2: open the cash confirm popup
     setShowCashPopup(true);
   };
+
+  // Build the paymentType string from selections e.g. 'cash', 'ib', 'cash+ib+mpaisa'
+  const buildPaymentType = () => {
+    const { cash, ib, mpaisa } = selectedPaymentMethods;
+    return [cash && 'cash', ib && 'ib', mpaisa && 'mpaisa'].filter(Boolean).join('+') || 'cash';
+  };
+
   const confirmCashPayment = async () => {
     setIsProcessing(true);
     setShowCashPopup(false);
@@ -433,15 +452,16 @@ function Checkout() {
     setCustomerMoney('');
     try {
       const total = calculateTotal();
+      const paymentType = buildPaymentType();
       const items = catalogue.map(item => ({
         id: item.id, name: item.name, price: item.price,
         quantity: item.qty, subtotal: item.price * item.qty,
       }));
       await dataService.addSale({
-        items, total, paymentType: 'cash',
+        items, total, paymentType,
         customerName: '', customerPhone: '', photoUrl: null, repaymentDate: '', isDebt: false,
       });
-      alert(`Cash payment confirmed. Total: ${fmt(total)}`);
+      alert(`Payment confirmed. Total: ${fmt(total)}`);
       setCatalogue([]);
     } catch (error) {
       console.error('Payment error:', error);
@@ -585,7 +605,7 @@ function Checkout() {
           </button>
 
           <button className="sr-btn-cash" onClick={handlePayCash} disabled={isProcessing}>
-            Pay with Cash
+            Pay with
           </button>
         </div>
 
@@ -740,6 +760,43 @@ function Checkout() {
               <div className="sr-modal-buttons">
                 <button className="sr-btn-cancel" onClick={() => { setShowQuantityModal(false); setSelectedItem(null); setQuantityToAdd(''); }}>Cancel</button>
                 {!isOutOfStock && <button className="sr-btn-confirm" onClick={confirmAddItem}>Add to Cart</button>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Payment Method modal ── */}
+      {showPaymentMethodModal && (() => {
+        const { cash, ib, mpaisa } = selectedPaymentMethods;
+        const toggle = (key) => setSelectedPaymentMethods(prev => ({ ...prev, [key]: !prev[key] }));
+        return (
+          <div className="sr-modal-overlay">
+            <div className="sr-modal-content" style={{ maxWidth: '320px' }}>
+              <h2 style={{ marginBottom: '6px' }}>Payment Method</h2>
+              <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '18px' }}>Select all that apply:</p>
+              {[['cash', '💵 Cash'], ['ib', '🏦 IB'], ['mpaisa', '📱 MPAiSA']].map(([key, label]) => (
+                <label key={key} onClick={() => toggle(key)} style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '12px 14px', marginBottom: '8px', borderRadius: '10px', cursor: 'pointer',
+                  border: `2px solid ${selectedPaymentMethods[key] ? '#667eea' : '#e5e7eb'}`,
+                  background: selectedPaymentMethods[key] ? '#eef2ff' : 'var(--surface)',
+                  transition: 'all 0.15s',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPaymentMethods[key]}
+                    onChange={() => toggle(key)}
+                    style={{ width: '18px', height: '18px', accentColor: '#667eea', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: '15px', fontWeight: 600, color: selectedPaymentMethods[key] ? '#4338ca' : '#374151' }}>
+                    {label}
+                  </span>
+                </label>
+              ))}
+              <div className="sr-modal-buttons" style={{ marginTop: '20px' }}>
+                <button className="sr-btn-cancel" onClick={() => setShowPaymentMethodModal(false)}>Cancel</button>
+                <button className="sr-btn-confirm" onClick={confirmPaymentMethod}>OK</button>
               </div>
             </div>
           </div>
