@@ -78,8 +78,12 @@ export default function Withdrawals() {
     // Attach running balance
     let running = 0;
     const withBalance = sorted.map(e => {
+      // Credit entries: owner received money (manual withdrawal or shop-close handover)
+      // Debit entries:  owner returned money to shop or paid a supplier
       running += e.type === 'out' ? e.amount : -e.amount;
       return { ...e, balance: running };
+      // balance > 0 = Cr — owner still holds shop money (normal)
+      // balance < 0 = Dr — owner has over-returned, shop owes owner
     });
     setEntries([...withBalance].reverse()); // newest first for display
   };
@@ -140,26 +144,35 @@ export default function Withdrawals() {
     setShowFilters(false);
   };
 
-  // ── Running totals for header cards ──────────────────────────────────
-  const totalOut = filtered.filter(e=>e.type==='out').reduce((a,e)=>a+e.amount,0);
-  const totalIn  = filtered.filter(e=>e.type==='in').reduce((a,e)=>a+e.amount,0);
-  // Current overall balance (using ALL entries, not just filtered)
-  const overallBalance = entries.length > 0 ? entries[0].balance : 0; // entries[0] is newest
+  // ── Owner's Withdrawal Account totals ───────────────────────────────
+  // This is the owner's personal withdrawal account (liability account).
+  // Credits increase it — money paid OUT to the owner, either:
+  //   • manually recorded as a withdrawal
+  //   • automatically when the shop closes (all cash at shop handed to owner)
+  // Debits decrease it — money the owner returns to the shop or pays to suppliers.
+  //   type='out' → CREDIT (owner received money — increases what they owe the shop)
+  //   type='in'  → DEBIT  (owner returned money — decreases what they owe the shop)
+  // Cr balance = owner still holds money that belongs to the shop (normal state)
+  // Dr balance = owner has returned more than taken (shop owes owner)
+  const totalCredit = filtered.filter(e=>e.type==='out').reduce((a,e)=>a+e.amount,0); // paid to owner
+  const totalDebit  = filtered.filter(e=>e.type==='in').reduce((a,e)=>a+e.amount,0);  // returned by owner
+  // Running balance = total still held by owner outside the shop (all entries, not filtered)
+  const overallBalance = entries.length > 0 ? entries[0].balance : 0;
 
   // ── Filter title ──────────────────────────────────────────────────────
   const getTitle = () => {
-    const typeMap = { all:'All Withdrawals', out:'Taken from Shop', in:'Returned to Shop' };
-    const label = typeMap[appliedTypeFilter] || 'All Withdrawals';
-    if (appliedDateFilter === 'today') return `${label} Today`;
+    const typeMap = { all:"Owner's Account", out:'Credits (Taken from Shop)', in:'Debits (Returned to Shop)' };
+    const label = typeMap[appliedTypeFilter] || "Owner's Account";
+    if (appliedDateFilter === 'today') return `${label} — Today`;
     if (appliedDateFilter === 'single' && appliedSelectedDate) {
       const y = toMidnight(new Date()); y.setDate(y.getDate()-1);
       const isYest = toMidnight(new Date(appliedSelectedDate)).getTime() === y.getTime();
-      if (isYest) return `${label} Yesterday`;
-      return `${label} on ${new Date(appliedSelectedDate).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
+      if (isYest) return `${label} — Yesterday`;
+      return `${label} — ${new Date(appliedSelectedDate).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
     }
     if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate)
-      return `${label} from ${new Date(appliedStartDate).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit'})} to ${new Date(appliedEndDate).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
-    return `${label} Today`;
+      return `${label} — ${new Date(appliedStartDate).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit'})} to ${new Date(appliedEndDate).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
+    return `${label} — Today`;
   };
 
   return (
@@ -184,7 +197,7 @@ export default function Withdrawals() {
           <div className="wd-filter-section">
             <div className="wd-filter-section-label">Type</div>
             <div className="wd-filter-btns">
-              {[['all','All'],['out','Taken from Shop'],['in','Returned to Shop']].map(([val,lbl])=>(
+              {[['all','All'],['out','Credit (Taken from Shop)'],['in','Debit (Returned to Shop)']].map(([val,lbl])=>(
                 <button key={val} className={`wd-ftype-btn${typeFilter===val?' active':''}`}
                   onClick={()=>setTypeFilter(val)}>{lbl}</button>
               ))}
@@ -221,19 +234,19 @@ export default function Withdrawals() {
         </div>
       )}
 
-      {/* ── Summary cards ── */}
+      {/* ── Summary cards — owner's account perspective ── */}
       <div className="wd-summary-row">
         <div className="wd-summary-card wd-card-balance">
-          <div className="wd-card-label">Balance Outside Shop</div>
+          <div className="wd-card-label">Balance Owed to Shop</div>
           <div className="wd-card-value">{fmt(overallBalance)}</div>
         </div>
-        <div className="wd-summary-card wd-card-out">
-          <div className="wd-card-label">Returned to Shop</div>
-          <div className="wd-card-value">{fmt(totalIn)}</div>
+        <div className="wd-summary-card wd-card-debit">
+          <div className="wd-card-label">Total Debit (Returned)</div>
+          <div className="wd-card-value">{fmt(totalDebit)}</div>
         </div>
-        <div className="wd-summary-card wd-card-in">
-          <div className="wd-card-label">{ownerUser ? `Handed to ${(ownerUser.gender||'').toLowerCase()==='female'?'Ms':'Mr'} ${ownerUser.fullName||ownerUser.name||'Owner'}` : 'Handed to Owner'}</div>
-          <div className="wd-card-value">{fmt(totalOut)}</div>
+        <div className="wd-summary-card wd-card-credit">
+          <div className="wd-card-label">Total Credit (Taken)</div>
+          <div className="wd-card-value">{fmt(totalCredit)}</div>
         </div>
       </div>
 
@@ -245,11 +258,16 @@ export default function Withdrawals() {
 
       {filtered.length === 0 ? (
         <div className="wd-empty">
-          <p>No withdrawal records found.</p>
+          <p>No records found for this period.</p>
           <p className="wd-empty-hint">
-            Records appear here automatically when the shop is closed (money taken out)
-            or opened with a float (money returned). Owner drawings from Expenses
-            and manual entries from Cash at Shop also appear here.
+            This is the owner's personal withdrawal account. It is <strong>credited</strong> when the owner
+            takes money from the shop — either as a manual withdrawal or automatically when
+            the shop closes and cash is handed to the owner. Each credit <strong>increases the balance</strong>,
+            meaning the owner holds more of the shop's money.<br/><br/>
+            It is <strong>debited</strong> when the owner returns money to the shop or pays a supplier on
+            the shop's behalf. Each debit <strong>reduces the balance</strong>.<br/><br/>
+            A <strong>Cr balance</strong> means the owner still holds money that belongs to the shop — the normal state.
+            A <strong>Dr balance</strong> means the owner has returned more than they took, so the shop owes the owner.
           </p>
         </div>
       ) : (
@@ -257,33 +275,56 @@ export default function Withdrawals() {
           <table className="wd-table">
             <thead>
               <tr>
-                <th>Date / Time</th>
-                <th>Description</th>
-                <th>Type</th>
-                <th className="wd-col-right">Amount</th>
-                <th className="wd-col-right">Balance</th>
+                <th className="wd-col-date">Date / Time</th>
+                <th className="wd-col-desc">Description</th>
+                <th className="wd-col-money wd-col-debit">Debit</th>
+                <th className="wd-col-money wd-col-credit">Credit</th>
+                <th className="wd-col-money wd-col-balance">Balance</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(entry => (
-                <tr key={entry.id}>
-                  <td className="wd-col-date">
-                    <div>{formatDate(entry)}</div>
-                    <div className="wd-time">{formatTime(entry)}</div>
-                  </td>
-                  <td className="wd-col-desc">{entry.description || '—'}</td>
-                  <td>
-                    <span className={`wd-type-badge ${entry.type === 'out' ? 'wd-badge-out' : 'wd-badge-in'}`}>
-                      {entry.type === 'out' ? 'OUT' : 'IN'}
-                    </span>
-                  </td>
-                  <td className={`wd-col-right wd-amount ${entry.type === 'out' ? 'wd-amount-out' : 'wd-amount-in'}`}>
-                    {entry.type === 'out' ? '-' : '+'}{fmt(entry.amount)}
-                  </td>
-                  <td className="wd-col-right wd-balance">{fmt(entry.balance)}</td>
-                </tr>
-              ))}
+              {filtered.map(entry => {
+                // type='out' = taken from shop → CREDIT (increases withdrawal account)
+                // type='in'  = returned to shop → DEBIT (decreases withdrawal account)
+                const isCredit = entry.type === 'out';
+                return (
+                  <tr key={entry.id} className={isCredit ? 'wd-row-credit' : 'wd-row-debit'}>
+                    <td className="wd-col-date">
+                      <div className="wd-date-main">{formatDate(entry)}</div>
+                      <div className="wd-time">{formatTime(entry)}</div>
+                    </td>
+                    <td className="wd-col-desc">{entry.description || '—'}</td>
+                    <td className="wd-col-money wd-col-debit">
+                      {!isCredit ? <span className="wd-debit-val">{fmt(entry.amount)}</span> : <span className="wd-nil">—</span>}
+                    </td>
+                    <td className="wd-col-money wd-col-credit">
+                      {isCredit ? <span className="wd-credit-val">{fmt(entry.amount)}</span> : <span className="wd-nil">—</span>}
+                    </td>
+                    <td className="wd-col-money wd-col-balance">
+                      <span className={entry.balance > 0 ? 'wd-bal-cr' : entry.balance < 0 ? 'wd-bal-dr' : 'wd-bal-zero'}>
+                        {fmt(Math.abs(entry.balance))}
+                        {entry.balance > 0 && <span className="wd-bal-tag"> Cr</span>}
+                        {entry.balance < 0 && <span className="wd-bal-tag"> Dr</span>}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
+            <tfoot>
+              <tr className="wd-tfoot-row">
+                <td colSpan={2} className="wd-tfoot-label">TOTALS</td>
+                <td className="wd-col-money wd-col-debit"><span className="wd-debit-val wd-total-val">{fmt(totalDebit)}</span></td>
+                <td className="wd-col-money wd-col-credit"><span className="wd-credit-val wd-total-val">{fmt(totalCredit)}</span></td>
+                <td className="wd-col-money wd-col-balance">
+                  <span className={overallBalance > 0 ? 'wd-bal-cr wd-total-val' : overallBalance < 0 ? 'wd-bal-dr wd-total-val' : 'wd-bal-zero wd-total-val'}>
+                    {fmt(Math.abs(overallBalance))}
+                    {overallBalance > 0 && <span className="wd-bal-tag"> Cr</span>}
+                    {overallBalance < 0 && <span className="wd-bal-tag"> Dr</span>}
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
