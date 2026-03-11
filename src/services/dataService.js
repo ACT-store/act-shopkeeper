@@ -2671,6 +2671,33 @@ class DataService {
     }
   }
 
+  // ── Catalogue Settings (shared across all apps via Firestore) ─────────────
+  async getCatalogueSettings() {
+    try {
+      if (this.currentUser) {
+        const snap = await getDocs(collection(db, 'app_config'));
+        const docData = snap.docs.find(d => d.id === 'catalogue_settings')?.data();
+        if (docData) {
+          await localforage.setItem('catalogue_settings', docData).catch(() => {});
+          return docData;
+        }
+      }
+      const cached = await localforage.getItem('catalogue_settings').catch(() => null);
+      if (cached) return cached;
+    } catch (err) { console.error('getCatalogueSettings:', err); }
+    return null;
+  }
+
+  async saveCatalogueSettings(data) {
+    try {
+      await localforage.setItem('catalogue_settings', data).catch(() => {});
+      if (this.currentUser) {
+        await setDoc(doc(db, 'app_config', 'catalogue_settings'), data, { merge: true });
+      }
+      return true;
+    } catch (err) { console.error('saveCatalogueSettings:', err); return false; }
+  }
+
   // Push all local data to Firebase
   async pushToFirebase() {
     if (!this.isOnline || !auth.currentUser) {
