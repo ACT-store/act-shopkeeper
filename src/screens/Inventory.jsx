@@ -478,8 +478,8 @@ function Inventory() {
   // Asset detail modal
   const [assetDetailItem, setAssetDetailItem] = useState(null);
 
-  // ── Storage-area tabs: Container / Storeroom / Tent / Tent-in-Store ──────────
-  const AREA_TABS = ['container', 'storeroom', 'tent', 'tent_in_store'];
+  // ── Storage-area tabs: Container / Storeroom / Tent / Tent-in-Store / Singles ─
+  const AREA_TABS = ['container', 'storeroom', 'tent', 'tent_in_store', 'singles'];
   const [areaItems,   setAreaItems]   = useState({});
   const [areaLoading, setAreaLoading] = useState({});
   const [areaLastSynced, setAreaLastSynced] = useState({});
@@ -496,13 +496,46 @@ function Inventory() {
   const [moveSearchTerm, setMoveSearchTerm] = useState('');
   const [moveQty,        setMoveQty]        = useState('');
   const [moveDestTab,    setMoveDestTab]    = useState('');
+  const [moveUnitName,   setMoveUnitName]   = useState('');     // unit label for Singles (e.g. "roll")
   const [moveSaving,     setMoveSaving]     = useState(false);
 
+  // Extract a singular unit name from a size/pack string e.g. "25 rolls" → "roll"
+  const parseUnitName = (sizeStr) => {
+    if (!sizeStr) return '';
+    const s = sizeStr.trim();
+    const match = s.match(/\d+\s*(rolls?|cans?|bottles?|pcs?|pieces?|units?|tabs?|tablets?|capsules?|bags?|packs?|sticks?|bars?|sachets?|pouches?|tins?|jars?|boxes?)/i);
+    if (match) {
+      let unit = match[1].toLowerCase();
+      if (unit.length > 2 && unit.endsWith('s')) unit = unit.slice(0, -1); // crude singularise
+      return unit;
+    }
+    return '';
+  };
+
   const AREA_LABELS = {
+    goods:         '🏪 Front Store',
     container:     '📦 Container',
     storeroom:     '🗄️ Storeroom',
     tent:          '⛺ Tent',
     tent_in_store: '🧺 Tent in Store',
+    singles:       '🔢 Singles',
+  };
+
+  // Parse pack size from a size string like "12pcs", "6x500ml", "24", "500g" → number
+  const parsePackSize = (sizeStr) => {
+    if (!sizeStr) return 1;
+    const s = (sizeStr + '').trim();
+    // "12pcs", "12 pcs", "24ct", "6 pieces"
+    const pcsMatch = s.match(/^(\d+)\s*(pcs|pieces|pack|units?|ct|count)/i);
+    if (pcsMatch) return Math.max(1, parseInt(pcsMatch[1], 10));
+    // "6x500ml", "12x330ml"
+    const xMatch = s.match(/^(\d+)\s*x/i);
+    if (xMatch) return Math.max(1, parseInt(xMatch[1], 10));
+    // bare number with no unit (e.g. "24")
+    const numOnly = s.match(/^(\d+)$/);
+    if (numOnly) return Math.max(1, parseInt(numOnly[1], 10));
+    // pure size measurement (e.g. "500g", "1L", "330ml") → treat as 1 unit per packet
+    return 1;
   };
 
   const openMoveModal = (tab) => {
@@ -511,72 +544,151 @@ function Inventory() {
     setMoveSearchTerm('');
     setMoveQty('');
     setMoveDestTab('');
+    setMoveUnitName('');
     setShowMoveModal(true);
   };
 
   const handleMoveStock = async () => {
-    if (!moveItem)           { alert('Please select an item to move.');          return; }
-    if (!moveDestTab)        { alert('Please select a destination storage.');     return; }
+    if (!moveItem)        { alert('Please select an item to move.');      return; }
+    if (!moveDestTab)     { alert('Please select a destination storage.'); return; }
     const qty = parseInt(moveQty, 10);
-    if (!qty || qty <= 0)    { alert('Please enter a valid quantity.');           return; }
+    if (!qty || qty <= 0) { alert('Please enter a valid quantity.');       return; }
 
-    // Determine the stock field: container/storeroom use "quantity"; tent/tent_in_store use "pcs"
+    const isGoodsSource = moveSourceTab === 'goods';
+
+    if (isGoodsSource) {
+      // ── Moving FROM Front Store (goods) ──────────────────────────────────
+      const good = moveItem;
+      const currentStock = typeof good.stock_quantity === 'number' ? good.stock_quantity : 0;
+      if (qty > currentStock) {
+        alert(`Not enough stock. Current Front Store stock: ${currentStock}`);
+        return;
+      }
+      setMoveSaving(true);
+      try {
+        await dataService.updateGood(good.id, { stock_quantity: Math.max(0, currentStock - qty) });
+        await loadGoods();
+
+        if (moveDestTab === 'singles') {
+          // Expand packs → individual units
+          const packSize = parsePackSize(good.size);
+          const totalSingles = packSize * qty;
+          const unitPrice = packSize > 1
+            ? parseFloat((parseFloat(good.price || 0) / packSize).toFixed(2))
+            : parseFloat(good.price || 0);
+          const existingSingles = await dataService.getAreaItems('singles');
+          const match = (existingSingles || []).find(
+            s => (s.name || '').toLowerCase().trim() === (good.name || '').toLowerCase().trim()
+          );
+          if (match) {
+            await dataService.updateAreaItem('singles', match.id, {
+              ...match, stock: parseInt(match.stock || 0, 10) + totalSingles,
+            });
+          } else {
+            await dataService.addAreaItem('singles', {
+              name: good.name || '', category: good.category || '',
+              price: unitPrice, stock: totalSingles, packSize, goodId: good.id,
+              unitName: moveUnitName || parseUnitName(good.size) || 'pc',
+            });
+          }
+          await loadAreaItems('singles');
+        } else {
+          const destUsesPcs = moveDestTab === 'tent' || moveDestTab === 'tent_in_store';
+          const destField   = destUsesPcs ? 'pcs' : 'quantity';
+          const destItems   = await dataService.getAreaItems(moveDestTab);
+          const match = (destItems || []).find(
+            d => (d.name || '').toLowerCase().trim() === (good.name || '').toLowerCase().trim()
+          );
+          if (match) {
+            await dataService.updateAreaItem(moveDestTab, match.id, {
+              ...match, [destField]: parseInt(match[destField] || 0, 10) + qty,
+            });
+          } else {
+            await dataService.addAreaItem(moveDestTab, {
+              name: good.name || '', barcode: good.barcode || '',
+              size: good.size || '', price: good.price || '',
+              quantity: destUsesPcs ? '' : String(qty),
+              pcs: destUsesPcs ? String(qty) : '',
+            });
+          }
+          if (areaItems[moveDestTab]) await loadAreaItems(moveDestTab);
+        }
+        setShowMoveModal(false);
+      } catch (err) {
+        console.error('Move stock error (goods):', err);
+        alert('Failed to move stock. Please try again.');
+      } finally { setMoveSaving(false); }
+      return;
+    }
+
+    // ── Moving FROM a storage area ────────────────────────────────────────
     const srcUsesPcs  = moveSourceTab === 'tent' || moveSourceTab === 'tent_in_store';
     const destUsesPcs = moveDestTab   === 'tent' || moveDestTab   === 'tent_in_store';
     const srcField    = srcUsesPcs  ? 'pcs' : 'quantity';
     const destField   = destUsesPcs ? 'pcs' : 'quantity';
-
     const currentSrc  = parseInt(moveItem[srcField] || 0, 10);
     if (qty > currentSrc) {
       alert(`Not enough stock. Current ${srcField} in ${AREA_LABELS[moveSourceTab]}: ${currentSrc}`);
       return;
     }
-
     setMoveSaving(true);
     try {
-      // Deduct from source
       await dataService.updateAreaItem(moveSourceTab, moveItem.id, {
-        ...moveItem,
-        [srcField]: currentSrc - qty,
+        ...moveItem, [srcField]: currentSrc - qty,
       });
 
-      // Find matching item in destination (by name, case-insensitive)
-      const destItems = await dataService.getAreaItems(moveDestTab);
-      const match = (destItems || []).find(
-        d => (d.name || '').toLowerCase().trim() === (moveItem.name || '').toLowerCase().trim()
-      );
-
-      if (match) {
-        const currentDest = parseInt(match[destField] || 0, 10);
-        await dataService.updateAreaItem(moveDestTab, match.id, {
-          ...match,
-          [destField]: currentDest + qty,
-        });
+      if (moveDestTab === 'singles') {
+        const packSize = parsePackSize(moveItem.size);
+        const totalSingles = packSize * qty;
+        const unitPrice = packSize > 1
+          ? parseFloat((parseFloat(moveItem.price || 0) / packSize).toFixed(2))
+          : parseFloat(moveItem.price || 0);
+        const existingSingles = await dataService.getAreaItems('singles');
+        const match = (existingSingles || []).find(
+          s => (s.name || '').toLowerCase().trim() === (moveItem.name || '').toLowerCase().trim()
+        );
+        if (match) {
+          await dataService.updateAreaItem('singles', match.id, {
+            ...match, stock: parseInt(match.stock || 0, 10) + totalSingles,
+          });
+        } else {
+          await dataService.addAreaItem('singles', {
+            name: moveItem.name || '', category: moveItem.category || '',
+            price: unitPrice, stock: totalSingles, packSize,
+            unitName: moveUnitName || parseUnitName(moveItem.size) || 'pc',
+          });
+        }
+        await loadAreaItems('singles');
       } else {
-        // Create new entry in destination
-        await dataService.addAreaItem(moveDestTab, {
-          name:     moveItem.name     || '',
-          barcode:  moveItem.barcode  || '',
-          size:     moveItem.size     || '',
-          price:    moveItem.price    || '',
-          notes:    moveItem.notes    || '',
-          quantity: destUsesPcs ? ''  : String(qty),
-          pcs:      destUsesPcs ? String(qty) : (moveItem.pcs || ''),
-        });
+        const destItems = await dataService.getAreaItems(moveDestTab);
+        const match = (destItems || []).find(
+          d => (d.name || '').toLowerCase().trim() === (moveItem.name || '').toLowerCase().trim()
+        );
+        if (match) {
+          await dataService.updateAreaItem(moveDestTab, match.id, {
+            ...match, [destField]: parseInt(match[destField] || 0, 10) + qty,
+          });
+        } else {
+          await dataService.addAreaItem(moveDestTab, {
+            name: moveItem.name || '', barcode: moveItem.barcode || '',
+            size: moveItem.size || '', price: moveItem.price || '',
+            notes: moveItem.notes || '',
+            quantity: destUsesPcs ? '' : String(qty),
+            pcs: destUsesPcs ? String(qty) : (moveItem.pcs || ''),
+          });
+        }
+        if (areaItems[moveDestTab]) await loadAreaItems(moveDestTab);
       }
-
-      // Refresh both tabs
       await loadAreaItems(moveSourceTab);
-      if (areaItems[moveDestTab]) await loadAreaItems(moveDestTab);
-
       setShowMoveModal(false);
     } catch (err) {
       console.error('Move stock error:', err);
       alert('Failed to move stock. Please try again.');
-    } finally {
-      setMoveSaving(false);
-    }
+    } finally { setMoveSaving(false); }
   };
+
+  // Kept as alias — the goods-source path is handled inline above via the
+  // extended handleMoveStock. This comment is just a marker.
 
   const [searchTerm, setSearchTerm] = useState('');
   const [lightboxSrc, setLightboxSrc] = useState(null);
@@ -761,12 +873,13 @@ function Inventory() {
             className={`inv-tab-btn${activeTab === 'goods' ? ' inv-tab-btn-active' : ''}`}
             onClick={() => handleTabChange('goods')}
           >
-            📦 Goods
+            🏪 Front Store
           </button>
           <button className={`inv-tab-btn${activeTab === 'container'     ? ' inv-tab-btn-active inv-tab-btn-active-container'   : ''}`} onClick={() => handleTabChange('container')}>📦 Container</button>
           <button className={`inv-tab-btn${activeTab === 'storeroom'     ? ' inv-tab-btn-active inv-tab-btn-active-storeroom'   : ''}`} onClick={() => handleTabChange('storeroom')}>🗄️ Storeroom</button>
           <button className={`inv-tab-btn${activeTab === 'tent'          ? ' inv-tab-btn-active inv-tab-btn-active-tent'        : ''}`} onClick={() => handleTabChange('tent')}>⛺ Tent</button>
           <button className={`inv-tab-btn${activeTab === 'tent_in_store' ? ' inv-tab-btn-active inv-tab-btn-active-tent-in-store' : ''}`} onClick={() => handleTabChange('tent_in_store')}>🧺 Tent in Store</button>
+          <button className={`inv-tab-btn${activeTab === 'singles'       ? ' inv-tab-btn-active inv-tab-btn-active-singles'     : ''}`} onClick={() => handleTabChange('singles')}>🔢 Singles</button>
           <button
             className={`inv-tab-btn${activeTab === 'assets' ? ' inv-tab-btn-active inv-tab-btn-active-assets' : ''}`}
             onClick={() => handleTabChange('assets')}
@@ -781,6 +894,18 @@ function Inventory() {
           </button>
         </div>
 
+        {activeTab === 'goods' && (
+          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>🏪 Front Store</div>
+            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Products available for sale at the counter. This list feeds the Checkout search bar.</div>
+          </div>
+        )}
+        {activeTab === 'singles' && (
+          <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
+            <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>🔢 Singles</div>
+            <div style={{ fontSize:'11px', color:'var(--text-secondary,#6b7280)', marginTop:'1px' }}>Individual units broken out from packets moved from Front Store or other storage areas.</div>
+          </div>
+        )}
         {activeTab === 'commission' && (
           <div style={{ padding:'6px 12px 2px', borderTop:'1px solid var(--border,#e5e7eb)' }}>
             <div style={{ fontWeight:700, fontSize:'14px', color:'var(--text-primary,#111)' }}>Commission Products</div>
@@ -822,6 +947,7 @@ function Inventory() {
                 activeTab === 'goods'         ? 'Search Front Store Product' :
                 activeTab === 'assets'        ? 'Search Asset'               :
                 activeTab === 'commission'    ? 'Search Commission Product'   :
+                activeTab === 'singles'       ? 'Search Singles'              :
                 activeTab === 'container'     ? 'Search Container Items'      :
                 activeTab === 'storeroom'     ? 'Search Storeroom Items'      :
                 activeTab === 'tent'          ? 'Search Tent Items'           :
@@ -844,7 +970,7 @@ function Inventory() {
               style={{ flexShrink:0, background:'linear-gradient(135deg,#667eea,#764ba2)', color:'#fff', border:'none', borderRadius:'10px', padding:'8px 14px', fontWeight:700, fontSize:'12px', cursor:'pointer', whiteSpace:'nowrap' }}
             >+ Add</button>
           )}
-          {AREA_TABS.includes(activeTab) && (
+          {(activeTab === 'goods' || AREA_TABS.includes(activeTab)) && activeTab !== 'singles' && (
             <button
               className="inv-move-stock-btn"
               onClick={() => openMoveModal(activeTab)}
@@ -899,7 +1025,7 @@ function Inventory() {
                 <thead className="inv-thead">
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
-                    <th className="inv-col-name">PRODUCT NAME</th>
+                    <th className="inv-col-frozen inv-col-name">PRODUCT NAME</th>
                     <th className="inv-col-size">SIZE</th>
                     <th>CATEGORY</th>
                     <th className="inv-col-right">PRICE</th>
@@ -915,7 +1041,7 @@ function Inventory() {
                     return (
                       <tr key={good.id} className="inv-data-row">
                         <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
-                        <td className="inv-col-name inv-name-cell">
+                        <td className="inv-col-frozen inv-col-name inv-name-cell">
                           <span className="inv-cell-value">{good.name ?? ''}</span>
                         </td>
                         <td className="inv-size-cell">
@@ -962,7 +1088,7 @@ function Inventory() {
                 <thead className="inv-thead">
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
-                    <th className="inv-col-name">ASSET NAME</th>
+                    <th className="inv-col-frozen inv-col-name">ASSET NAME</th>
                     <th className="inv-col-center">QTY</th>
                     <th className="inv-col-right">UNIT COST</th>
                     <th className="inv-col-right">SUBTOTAL</th>
@@ -978,7 +1104,7 @@ function Inventory() {
                   {filteredAssets.map((asset, idx) => (
                     <tr key={asset.id} className="inv-data-row">
                       <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
-                      <td className="inv-col-name inv-name-cell">
+                      <td className="inv-col-frozen inv-col-name inv-name-cell">
                         <span className="inv-cell-value">{asset.name || '—'}</span>
                       </td>
                       <td className="inv-col-center">
@@ -1044,7 +1170,7 @@ function Inventory() {
                 <thead className="inv-thead">
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
-                    <th className="inv-col-name">NAME</th>
+                    <th className="inv-col-frozen inv-col-name">NAME</th>
                     {!isTent && !isTentInStore && <th className="inv-col-barcode-no">BARCODE</th>}
                     {!isTent && !isTentInStore && <th className="inv-col-center">CTN / QTY</th>}
                     <th className="inv-col-center">PCS</th>
@@ -1058,7 +1184,7 @@ function Inventory() {
                   {filtered.map((item, idx) => (
                     <tr key={item.id} className="inv-data-row">
                       <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
-                      <td className="inv-col-name inv-name-cell">
+                      <td className="inv-col-frozen inv-col-name inv-name-cell">
                         <span className="inv-cell-value">{item.name || '—'}</span>
                       </td>
                       {!isTent && !isTentInStore && (
@@ -1118,7 +1244,87 @@ function Inventory() {
           );
         })()}
 
-        {/* ── COMMISSION TAB ── */}
+        {/* ── SINGLES TAB ── */}
+        {activeTab === 'singles' && (() => {
+          const tabItems = (areaItems['singles'] || []);
+          const filtered = searchTerm
+            ? tabItems.filter(i => (i.name||'').toLowerCase().includes(searchTerm.toLowerCase()))
+            : tabItems;
+          const loading  = areaLoading['singles'];
+          if (loading) return <div className="inv-empty">Loading…</div>;
+          if (filtered.length === 0) return (
+            <div className="inv-empty">
+              {searchTerm
+                ? `No singles matching "${searchTerm}"`
+                : 'No singles yet. Move a packet from Front Store or a storage area using ⇄ Move Stock.'}
+            </div>
+          );
+          return (
+            <div className="inv-table-wrapper">
+              <table className="inv-table">
+                <thead className="inv-thead">
+                  <tr>
+                    <th className="inv-col-frozen inv-col-num">#</th>
+                    <th className="inv-col-frozen inv-col-name">NAME</th>
+                    <th>CATEGORY</th>
+                    <th className="inv-col-right">PRICE</th>
+                    <th className="inv-col-center">STOCK</th>
+                    <th>STATUS</th>
+                    <th className="inv-col-center">EDIT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((item, idx) => {
+                    const stock  = parseInt(item.stock ?? 0, 10);
+                    const status = getStockStatus(stock);
+                    return (
+                      <tr key={item.id} className="inv-data-row">
+                        <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
+                        <td className="inv-col-frozen inv-col-name inv-name-cell">
+                          <span className="inv-cell-value">
+                            {item.name || '—'}
+                            {item.unitName ? <span style={{ color: '#667eea', fontWeight: 400, fontSize: '0.85em', marginLeft: '5px' }}>({item.unitName})</span> : null}
+                          </span>
+                        </td>
+                        <td className="inv-cat-cell">{item.category || '—'}</td>
+                        <td className="inv-col-right">
+                          <span className="inv-cell-value">{item.price != null && item.price !== '' ? fmt(parseFloat(item.price)) : '—'}</span>
+                        </td>
+                        <td className="inv-col-center">
+                          <span className="inv-cell-value">{stock}</span>
+                        </td>
+                        <td>
+                          {status ? <span className={`inv-badge ${status.cls}`}>{status.label}</span> : '—'}
+                        </td>
+                        <td className="inv-col-center">
+                          <button
+                            className="inv-edit-row-btn"
+                            onClick={() => {
+                              setEditingAreaItem(item);
+                              setAreaForm({
+                                name:     item.name     || '',
+                                barcode:  '',
+                                quantity: '',
+                                pcs:      String(item.stock ?? ''),
+                                size:     '',
+                                price:    item.price    != null ? String(item.price) : '',
+                                notes:    item.category || '',
+                              });
+                              setShowAreaAddModal(true);
+                            }}
+                            title="Edit item"
+                          >
+                            <Pencil size={15} strokeWidth={2} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
         {activeTab === 'commission' && (          <>
             {commissionLoading ? (
               <div style={{ textAlign:'center', padding:'40px', color:'var(--text-secondary,#9ca3af)' }}>Loading...</div>
@@ -1326,13 +1532,19 @@ function Inventory() {
 
       {/* ── Move Stock Modal ── */}
       {showMoveModal && (() => {
-        const srcItems = areaItems[moveSourceTab] || [];
+        const isGoodsSource = moveSourceTab === 'goods';
+        const srcItems = isGoodsSource
+          ? goods
+          : (areaItems[moveSourceTab] || []);
         const filteredMoveItems = moveSearchTerm
           ? srcItems.filter(i => (i.name || '').toLowerCase().includes(moveSearchTerm.toLowerCase()))
           : srcItems;
-        const destOptions = AREA_TABS.filter(t => t !== moveSourceTab);
-        const srcUsesPcs = moveSourceTab === 'tent' || moveSourceTab === 'tent_in_store';
-        const srcField   = srcUsesPcs ? 'pcs' : 'quantity';
+        // dest options: all AREA_TABS (including singles) except source; goods is never a dest
+        const destOptions = isGoodsSource
+          ? AREA_TABS  // container, storeroom, tent, tent_in_store, singles
+          : AREA_TABS.filter(t => t !== moveSourceTab);
+        const srcUsesPcs = !isGoodsSource && (moveSourceTab === 'tent' || moveSourceTab === 'tent_in_store');
+        const srcField   = isGoodsSource ? 'stock_quantity' : (srcUsesPcs ? 'pcs' : 'quantity');
 
         return (
           <Portal>
@@ -1381,7 +1593,8 @@ function Inventory() {
                           >
                             <div className="inv-move-item-name">{item.name || '—'}</div>
                             <div className="inv-move-item-stock">
-                              {srcField === 'pcs' ? 'Pcs' : 'Qty'}: <strong>{stock}</strong>
+                              {isGoodsSource ? 'Stock' : (srcField === 'pcs' ? 'Pcs' : 'Qty')}: <strong>{item[srcField] ?? 0}</strong>
+                              {isGoodsSource && item.size ? <span style={{ color:'#9ca3af', marginLeft: 6, fontSize:'11px' }}>({item.size})</span> : null}
                             </div>
                             {isSelected && <Check size={15} className="inv-move-item-check"/>}
                           </div>
@@ -1420,12 +1633,34 @@ function Inventory() {
                           <button
                             key={tab}
                             className={`inv-move-dest-btn${moveDestTab === tab ? ' inv-move-dest-btn-active' : ''}`}
-                            onClick={() => setMoveDestTab(tab)}
+                            onClick={() => {
+                              setMoveDestTab(tab);
+                              if (tab === 'singles') {
+                                const size = moveItem.size || (isGoodsSource ? moveItem.size : '');
+                                setMoveUnitName(parseUnitName(size));
+                              } else {
+                                setMoveUnitName('');
+                              }
+                            }}
                           >
                             {AREA_LABELS[tab]}
                           </button>
                         ))}
                       </div>
+                      {moveDestTab === 'singles' && (
+                        <div style={{ marginTop: 14 }}>
+                          <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '5px', color: 'var(--text-primary,#111)' }}>
+                            Unit name <span style={{ fontWeight: 400, color: '#9ca3af', fontSize: '12px' }}>(e.g. roll, can, pc)</span>
+                          </label>
+                          <input
+                            className="inv-input"
+                            placeholder="e.g. roll, can, bottle, pc"
+                            value={moveUnitName}
+                            onChange={e => setMoveUnitName(e.target.value)}
+                            style={{ fontSize: '14px' }}
+                          />
+                        </div>
+                      )}
                     </>
                   )}
 
