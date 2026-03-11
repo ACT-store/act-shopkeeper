@@ -739,6 +739,7 @@ class DataService {
       paymentType: sale.paymentType,
       payment_type: sale.paymentType,
       paymentMethod: sale.paymentType,
+      description: sale.description || '',
       customerName: sale.customerName || '',
       customer_name: sale.customerName || '',
       customerPhone: sale.customerPhone || '',
