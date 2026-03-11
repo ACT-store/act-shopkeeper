@@ -45,6 +45,9 @@ function Checkout() {
   const [repaymentDate, setRepaymentDate] = useState('');
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [selectedPaymentMethods, setSelectedPaymentMethods] = useState({ cash: true, ib: false, mpaisa: false });
+  const [showIbRefModal, setShowIbRefModal] = useState(false);
+  const [showMpaisaRefModal, setShowMpaisaRefModal] = useState(false);
+  const [transferRef, setTransferRef] = useState('');
   const [showCashPopup, setShowCashPopup] = useState(false);
   const [showChangeCalc, setShowChangeCalc] = useState(false);  // child modal inside cash confirm
   const [customerMoney, setCustomerMoney] = useState('');       // raw input from customer
@@ -435,8 +438,15 @@ function Checkout() {
     const { cash, ib, mpaisa } = selectedPaymentMethods;
     if (!cash && !ib && !mpaisa) { alert('Please select at least one payment method.'); return; }
     setShowPaymentMethodModal(false);
-    // Step 2: open the cash confirm popup
-    setShowCashPopup(true);
+    setTransferRef('');
+    if (ib) {
+      setShowIbRefModal(true);
+    } else if (mpaisa) {
+      setShowMpaisaRefModal(true);
+    } else {
+      // cash — open the cash confirm popup
+      setShowCashPopup(true);
+    }
   };
 
   // Build the paymentType string from selections e.g. 'cash', 'ib', 'cash+ib+mpaisa'
@@ -467,6 +477,72 @@ function Checkout() {
       console.error('Payment error:', error);
       alert('Payment failed. Please try again.');
     } finally { setIsProcessing(false); }
+  };
+
+  const confirmIbPayment = async () => {
+    const ref = transferRef.trim();
+    if (!ref) { alert('Please enter the Bank Transfer Reference.'); return; }
+    setIsProcessing(true);
+    setShowIbRefModal(false);
+    try {
+      const total = calculateTotal();
+      const description = `Sales payment via Internet Banking ref: ${ref}`;
+      const now = new Date().toISOString();
+      const items = catalogue.map(item => ({
+        id: item.id, name: item.name, price: item.price,
+        quantity: item.qty, subtotal: item.price * item.qty,
+      }));
+      const newSale = await dataService.addSale({
+        items, total, paymentType: 'ib', description,
+        customerName: '', customerPhone: '', photoUrl: null, repaymentDate: '', isDebt: false,
+      });
+      await dataService.addBankTransfer({
+        amount: total,
+        description,
+        reference: ref,
+        source: 'sale',
+        saleId: newSale.id,
+        date: now,
+      });
+      alert(`Payment confirmed. Total: ${fmt(total)}`);
+      setCatalogue([]);
+    } catch (error) {
+      console.error('IB payment error:', error);
+      alert('Payment failed. Please try again.');
+    } finally { setIsProcessing(false); setTransferRef(''); }
+  };
+
+  const confirmMpaisaPayment = async () => {
+    const ref = transferRef.trim();
+    if (!ref) { alert('Please enter the MPAiSA Transfer ID.'); return; }
+    setIsProcessing(true);
+    setShowMpaisaRefModal(false);
+    try {
+      const total = calculateTotal();
+      const description = `Sales payment via MPAISA ref: ${ref}`;
+      const now = new Date().toISOString();
+      const items = catalogue.map(item => ({
+        id: item.id, name: item.name, price: item.price,
+        quantity: item.qty, subtotal: item.price * item.qty,
+      }));
+      const newSale = await dataService.addSale({
+        items, total, paymentType: 'mpaisa', description,
+        customerName: '', customerPhone: '', photoUrl: null, repaymentDate: '', isDebt: false,
+      });
+      await dataService.addMpaisaTransfer({
+        amount: total,
+        description,
+        reference: ref,
+        source: 'sale',
+        saleId: newSale.id,
+        date: now,
+      });
+      alert(`Payment confirmed. Total: ${fmt(total)}`);
+      setCatalogue([]);
+    } catch (error) {
+      console.error('MPAiSA payment error:', error);
+      alert('Payment failed. Please try again.');
+    } finally { setIsProcessing(false); setTransferRef(''); }
   };
 
   // ── Credit payment ─────────────────────────────────────────────────────
@@ -813,6 +889,68 @@ function Checkout() {
           </div>
         );
       })()}
+
+      {/* ── Bank Transfer ID modal (IB) ── */}
+      {showIbRefModal && (
+        <div className="sr-modal-overlay">
+          <div className="sr-modal-content" style={{ maxWidth: '320px' }}>
+            <h2 style={{ marginBottom: '6px' }}>Bank Transfer ID</h2>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+              Enter the reference for this internet banking transfer.
+            </p>
+            <input
+              className="sr-ref-input"
+              type="text"
+              placeholder="Enter Transfer Ref here"
+              value={transferRef}
+              onChange={e => setTransferRef(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confirmIbPayment()}
+              autoFocus
+              style={{
+                width: '100%', padding: '11px 13px', fontSize: '15px',
+                border: '1.5px solid #d1d5db', borderRadius: '9px',
+                outline: 'none', boxSizing: 'border-box',
+                fontFamily: 'inherit',
+              }}
+            />
+            <div className="sr-modal-buttons" style={{ marginTop: '20px' }}>
+              <button className="sr-btn-cancel" onClick={() => { setShowIbRefModal(false); setTransferRef(''); }}>Cancel</button>
+              <button className="sr-btn-confirm" onClick={confirmIbPayment}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MPAiSA Transfer ID modal ── */}
+      {showMpaisaRefModal && (
+        <div className="sr-modal-overlay">
+          <div className="sr-modal-content" style={{ maxWidth: '320px' }}>
+            <h2 style={{ marginBottom: '6px' }}>MPAiSA Transfer ID</h2>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+              Enter the ID for this MPAiSA transfer.
+            </p>
+            <input
+              className="sr-ref-input"
+              type="text"
+              placeholder="Enter Transfer ID here"
+              value={transferRef}
+              onChange={e => setTransferRef(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confirmMpaisaPayment()}
+              autoFocus
+              style={{
+                width: '100%', padding: '11px 13px', fontSize: '15px',
+                border: '1.5px solid #d1d5db', borderRadius: '9px',
+                outline: 'none', boxSizing: 'border-box',
+                fontFamily: 'inherit',
+              }}
+            />
+            <div className="sr-modal-buttons" style={{ marginTop: '20px' }}>
+              <button className="sr-btn-cancel" onClick={() => { setShowMpaisaRefModal(false); setTransferRef(''); }}>Cancel</button>
+              <button className="sr-btn-confirm" onClick={confirmMpaisaPayment}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Cash confirm popup ── */}
       {showCashPopup && (() => {
