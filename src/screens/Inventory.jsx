@@ -1016,7 +1016,7 @@ function Inventory() {
                 <thead className="inv-thead">
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
-                    <th className="inv-col-frozen inv-col-name">PRODUCT NAME</th>
+                    <th className="inv-col-name">PRODUCT NAME</th>
                     <th className="inv-col-size">SIZE</th>
                     <th>CATEGORY</th>
                     <th className="inv-col-right">PRICE</th>
@@ -1032,7 +1032,7 @@ function Inventory() {
                     return (
                       <tr key={good.id} className="inv-data-row">
                         <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
-                        <td className="inv-col-frozen inv-col-name inv-name-cell">
+                        <td className="inv-col-name inv-name-cell">
                           <span className="inv-cell-value">{good.name ?? ''}</span>
                         </td>
                         <td className="inv-size-cell">
@@ -1079,7 +1079,7 @@ function Inventory() {
                 <thead className="inv-thead">
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
-                    <th className="inv-col-frozen inv-col-name">ASSET NAME</th>
+                    <th className="inv-col-name">ASSET NAME</th>
                     <th className="inv-col-center">QTY</th>
                     <th className="inv-col-right">UNIT COST</th>
                     <th className="inv-col-right">SUBTOTAL</th>
@@ -1095,7 +1095,7 @@ function Inventory() {
                   {filteredAssets.map((asset, idx) => (
                     <tr key={asset.id} className="inv-data-row">
                       <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
-                      <td className="inv-col-frozen inv-col-name inv-name-cell">
+                      <td className="inv-col-name inv-name-cell">
                         <span className="inv-cell-value">{asset.name || '—'}</span>
                       </td>
                       <td className="inv-col-center">
@@ -1160,7 +1160,7 @@ function Inventory() {
                 <thead className="inv-thead">
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
-                    <th className="inv-col-frozen inv-col-name">NAME</th>
+                    <th className="inv-col-name">NAME</th>
                     {!pcsOnly && <th className="inv-col-barcode-no">BARCODE</th>}
                     {!pcsOnly && <th className="inv-col-center">CTN / QTY</th>}
                     <th className="inv-col-center">PCS</th>
@@ -1174,7 +1174,7 @@ function Inventory() {
                   {filtered.map((item, idx) => (
                     <tr key={item.id} className="inv-data-row">
                       <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
-                      <td className="inv-col-frozen inv-col-name inv-name-cell">
+                      <td className="inv-col-name inv-name-cell">
                         <span className="inv-cell-value">{item.name || '—'}</span>
                       </td>
                       {!pcsOnly && (
@@ -1255,7 +1255,7 @@ function Inventory() {
                 <thead className="inv-thead">
                   <tr>
                     <th className="inv-col-frozen inv-col-num">#</th>
-                    <th className="inv-col-frozen inv-col-name">NAME</th>
+                    <th className="inv-col-name">NAME</th>
                     <th>CATEGORY</th>
                     <th className="inv-col-right">PRICE</th>
                     <th className="inv-col-center">STOCK</th>
@@ -1270,7 +1270,7 @@ function Inventory() {
                     return (
                       <tr key={item.id} className="inv-data-row">
                         <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
-                        <td className="inv-col-frozen inv-col-name inv-name-cell">
+                        <td className="inv-col-name inv-name-cell">
                           <span className="inv-cell-value">
                             {item.name || '—'}
                             {item.unitName ? <span style={{ color: '#667eea', fontWeight: 400, fontSize: '0.85em', marginLeft: '5px' }}>({item.unitName})</span> : null}
