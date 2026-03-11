@@ -10,19 +10,26 @@ import './Checkout.css';
 import { NativeSettings, AndroidSettings } from 'capacitor-native-settings';
 
 // ── Barcode beep (Web Audio API — no file needed) ──────────────────────────
+// Re-use a single AudioContext across beeps — Android WebView suspends new
+// contexts until a user gesture; resuming is more reliable than creating fresh.
+let _beepCtx = null;
 function playBeep() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1046, ctx.currentTime);       // C6
-    gain.gain.setValueAtTime(0.35, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.18);
+    if (!_beepCtx) _beepCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _beepCtx;
+    const resume = ctx.state === 'suspended' ? ctx.resume() : Promise.resolve();
+    resume.then(() => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1046, ctx.currentTime); // C6
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.2);
+    });
   } catch (_) {}
 }
 
@@ -57,18 +64,17 @@ function Checkout() {
   const [quantityToAdd, setQuantityToAdd] = useState('');
 
   // ── Barcode scanner states ─────────────────────────────────────────────
-  const [scannerActive, setScannerActive] = useState(false);
-  const [scannerError, setScannerError] = useState('');
-  const [lastScanned, setLastScanned] = useState(null); // {barcode, timestamp}
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const scanIntervalRef = useRef(null);
-  // Prevent duplicate scans within 1.5s of the same barcode
-  const lastScanRef = useRef({ code: null, ts: 0 });
-  // Always hold the latest goods so the decodeFromConstraints callback never
-  // uses a stale closure.  Without this ref, goods captured when startScanner
-  // is called may be empty (if Firebase hasn't returned yet) and the lookup
-  // always fails silently.
+  const [scannerActive, setScannerActive]   = useState(false);
+  const [scannerError, setScannerError]     = useState('');
+  const [lastScanned, setLastScanned]       = useState(null);
+  const videoRef       = useRef(null);  // <video> element
+  const streamRef      = useRef(null);  // MediaStream (camera feed)
+  const rafRef         = useRef(null);  // requestAnimationFrame handle
+  const canvasRef      = useRef(null);  // off-screen canvas for frame capture
+  const detectorRef    = useRef(null);  // BarcodeDetector instance (native API)
+  const zxingRef       = useRef(null);  // ZXing reader (fallback)
+  const lastScanRef    = useRef({ code: null, ts: 0 }); // debounce duplicate scans
+  // Always hold latest goods so scan callbacks never use stale closure
   const goodsRef = useRef(goods);
   useEffect(() => { goodsRef.current = goods; }, [goods]);
 
@@ -242,42 +248,26 @@ function Checkout() {
     }, 0);
 
   // ── Barcode scanner ────────────────────────────────────────────────────
-  // Uses the BarcodeDetector API (supported on Android Chrome / WebView API 83+)
-  // with a fallback message if unsupported.
-  const startScanner = async () => {
-    setScannerError('');
-    setLastScanned(null);
-
-    try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const codeReader = new BrowserMultiFormatReader();
-      streamRef.current = codeReader;
-      setScannerActive(true);
-
-      await new Promise(r => setTimeout(r, 100));
-      if (!videoRef.current) { setScannerActive(false); return; }
-
-      await codeReader.decodeFromConstraints(
-        { video: { facingMode: 'environment' } },
-        videoRef.current,
-        (result, err) => {
-          if (!result) return;
-          const code = result.getText();
-          const now = Date.now();
-          if (code === lastScanRef.current.code && now - lastScanRef.current.ts < 1500) return;
-          lastScanRef.current = { code, ts: now };
-          handleBarcodeDetected(code);
-        }
-      );
-    } catch (err) {
-      setScannerError('Camera access denied. Please allow camera permission and try again.');
-      setScannerActive(false);
-    }
-  };
+  // Strategy:
+  //   1. Try native BarcodeDetector API (built into Android WebView / Chrome 83+)
+  //      — fastest, most reliable on-device, no library needed
+  //   2. Fall back to @zxing/browser using canvas frame-polling (NOT decodeFromConstraints
+  //      which is unreliable on Android WebView)
+  //
+  // Both paths share the same camera stream (getUserMedia) so the video element
+  // always shows a live feed regardless of which decoder is active.
 
   const stopScanner = () => {
+    // Cancel any pending animation frame
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    // Stop ZXing reader if active
+    if (zxingRef.current) {
+      try { zxingRef.current.reset(); } catch (_) {}
+      zxingRef.current = null;
+    }
+    // Stop camera stream tracks
     if (streamRef.current) {
-      try { streamRef.current.reset(); } catch (_) {}
+      streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
     if (videoRef.current) { videoRef.current.srcObject = null; }
@@ -285,26 +275,150 @@ function Checkout() {
   };
 
   const handleBarcodeDetected = (code) => {
-    // Use goodsRef.current (not the goods closure variable) so we always
-    // search the latest goods list even if Firebase updated it after the
-    // scanner started.
+    const now = Date.now();
+    // Debounce — ignore same barcode within 2 seconds
+    if (code === lastScanRef.current.code && now - lastScanRef.current.ts < 2000) return;
+    lastScanRef.current = { code, ts: now };
+
     const match = goodsRef.current.find(g =>
       g.barcode && String(g.barcode).trim() === String(code).trim()
     );
 
     if (!match) {
-      // No match — show a visible error overlay (not just the in-scanner hint
-      // which disappears the moment scannerActive becomes false).
-      stopScanner();
-      setScannerError(`No product found for barcode "${code}". Make sure the barcode value is saved in the product's profile.`);
+      // Unknown barcode — show error but keep scanner open so user can try again
+      setLastScanned({ code, matched: false });
       return;
     }
 
-    // Match found — beep and add to cart
+    // Match found — beep, add to cart, keep scanner open for next item
     playBeep();
     addToCart(match, 1);
     setLastScanned({ code, matched: true, name: match.name });
-    // Do NOT stop the scanner — user can swipe away and scan another item
+  };
+
+  // ── Path 1: native BarcodeDetector (Android WebView / Chrome) ─────────
+  const startNativeDetector = (videoEl) => {
+    const detector = new window.BarcodeDetector({
+      formats: [
+        'ean_13','ean_8','upc_a','upc_e',
+        'code_39','code_93','code_128',
+        'qr_code','data_matrix','itf',
+      ],
+    });
+    detectorRef.current = detector;
+
+    const tick = async () => {
+      if (!videoEl || videoEl.readyState < 2) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      try {
+        const barcodes = await detector.detect(videoEl);
+        if (barcodes.length > 0) {
+          handleBarcodeDetected(barcodes[0].rawValue);
+        }
+      } catch (_) {}
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  // ── Path 2: ZXing canvas frame-polling fallback ────────────────────────
+  const startZxingFallback = async (videoEl) => {
+    const { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } =
+      await import('@zxing/browser');
+
+    // Give ZXing hints for common barcode formats to improve decode rate
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,  BarcodeFormat.UPC_E,
+      BarcodeFormat.CODE_39, BarcodeFormat.CODE_93, BarcodeFormat.CODE_128,
+      BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX, BarcodeFormat.ITF,
+    ]);
+    hints.set(DecodeHintType.TRY_HARDER, true);
+
+    const reader = new BrowserMultiFormatReader(hints);
+    zxingRef.current = reader;
+
+    // Off-screen canvas to capture frames from the video element
+    if (!canvasRef.current) canvasRef.current = document.createElement('canvas');
+    const canvas  = canvasRef.current;
+    const ctx2d   = canvas.getContext('2d');
+
+    const tick = () => {
+      if (!videoEl || videoEl.readyState < 2 || videoEl.videoWidth === 0) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      canvas.width  = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      ctx2d.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      try {
+        const result = reader.decodeFromCanvas(canvas);
+        if (result) handleBarcodeDetected(result.getText());
+      } catch (_) {
+        // NotFoundException is thrown on every frame with no barcode — expected, ignore
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  // ── Main startScanner entry point ──────────────────────────────────────
+  const startScanner = async () => {
+    setScannerError('');
+    setLastScanned(null);
+    lastScanRef.current = { code: null, ts: 0 };
+
+    // 1. Request camera stream
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' }, // rear camera
+          width:  { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+    } catch (err) {
+      const msg = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
+        ? 'Camera access denied. Please allow camera permission in your device settings and try again.'
+        : `Camera error: ${err.message}`;
+      setScannerError(msg);
+      return;
+    }
+
+    streamRef.current = stream;
+    setScannerActive(true);
+
+    // 2. Wait for the video element to mount (it renders after setScannerActive(true))
+    await new Promise(r => setTimeout(r, 80));
+    if (!videoRef.current) { stopScanner(); return; }
+
+    // 3. Attach stream to video element and wait for it to be playing
+    const videoEl = videoRef.current;
+    videoEl.srcObject = stream;
+    videoEl.setAttribute('playsinline', 'true');
+    videoEl.muted = true;
+    await videoEl.play().catch(() => {});
+
+    // Wait until video has actual dimensions (camera feed is live)
+    await new Promise(resolve => {
+      const check = () => {
+        if (videoEl.videoWidth > 0) { resolve(); return; }
+        setTimeout(check, 50);
+      };
+      check();
+    });
+
+    // 4. Choose decoder: native BarcodeDetector first, ZXing canvas fallback second
+    if (window.BarcodeDetector) {
+      startNativeDetector(videoEl);
+    } else {
+      await startZxingFallback(videoEl);
+    }
   };
 
   // ── Cash payment ───────────────────────────────────────────────────────
@@ -506,7 +620,7 @@ function Checkout() {
             </div>
 
             <div className="sr-scanner-viewport">
-              <video ref={videoRef} className="sr-scanner-video" playsInline muted autoPlay />
+              <video ref={videoRef} className="sr-scanner-video" playsInline muted />
               {/* Targeting reticle */}
               <div className="sr-scanner-reticle">
                 <div className="sr-reticle-corner sr-reticle-tl" />
@@ -522,7 +636,7 @@ function Checkout() {
                 lastScanned.matched ? (
                   <span className="sr-scan-success">✓ Added: {lastScanned.name} — scan again for another item</span>
                 ) : (
-                  <span className="sr-scan-fail">No product found for barcode "{lastScanned.code}"</span>
+                  <span className="sr-scan-fail">⚠ No product for barcode "{lastScanned.code}" — try again</span>
                 )
               ) : (
                 <span>Point camera at a barcode</span>
