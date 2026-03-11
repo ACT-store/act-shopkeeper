@@ -37,7 +37,7 @@ export class ErrorBoundary extends React.Component {
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center', height: '100vh', padding: '24px',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: 'linear-gradient(160deg, #0a1f0f 0%, #0d2e18 40%, #1a4d3a 100%)',
           color: 'white', textAlign: 'center'
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
@@ -49,7 +49,7 @@ export class ErrorBoundary extends React.Component {
             onClick={() => window.location.reload()}
             style={{
               padding: '12px 28px', borderRadius: '10px', border: 'none',
-              background: 'white', color: '#667eea', fontWeight: 700,
+              background: 'white', color: '#0d2e18', fontWeight: 700,
               fontSize: '15px', cursor: 'pointer'
             }}
           >
@@ -255,29 +255,20 @@ const PAGES = [
     component: Inventory,
     helpContent: `
       <h3>Inventory</h3>
-      <p>Inventory is split into separate <strong>storage areas</strong>. Each tab shows stock stored in that location. Only items in the <strong>Front Store (Goods)</strong> appear in the Checkout search bar — items in all other areas must be transferred first before they can be sold.</p>
+      <p>This page shows every product in your shop and how many units you have in stock right now.</p>
 
-      <h4>Storage Areas</h4>
-      <p>&#x1f4e6; <strong>Goods (Front Store)</strong> &mdash; products currently on the shop floor available for sale. These are the only items that appear in Checkout.<br/>
-      &#x1f4e6; <strong>Container</strong> &mdash; bulk stock stored in the container. Tracks cartons (CTN/QTY) and pieces (PCS).<br/>
-      &#x1f5c4;&#xfe0f; <strong>Storeroom</strong> &mdash; stock held inside the storeroom building.<br/>
-      &#x26fa; <strong>Tent</strong> &mdash; items displayed or sold from the outdoor tent.<br/>
-      &#x1f9fa; <strong>Tent in Store</strong> &mdash; tent stock currently stored indoors.<br/>
-      &#x1f527; <strong>Operational Assets</strong> &mdash; equipment and assets purchased for the business (not for resale).<br/>
-      &#x1f91d; <strong>Commission</strong> &mdash; products sold on behalf of others where the shop earns a commission per sale.</p>
+      <h4>How It Works</h4>
+      <p>All products are listed alphabetically. Use the search box to find a product by name. Stock levels update automatically from sales and purchases.</p>
 
-      <h4>Moving Stock Between Areas</h4>
-      <p>To move items from one storage area to another, tap the <strong>&#x21c4; Move Stock</strong> button (visible on any storage area tab). Select the item, enter the quantity to move, then choose the destination area. The stock count will decrease in the source area and increase in the destination automatically.</p>
-      <p>&#x26a0;&#xfe0f; Items must be moved to the <strong>Front Store (Goods)</strong> tab before they can appear in the Checkout search and be sold.</p>
+      <h4>Examples</h4>
+      <p>&#x1f4e6; <em>You want to check if you need to reorder rice:</em> Search "Rice" &rarr; check the Quantity column. If it shows &#x1f7e1; Low Stock (1&ndash;5 units) or &#x1f534; Out of Stock (0 units), it's time to reorder.</p>
+      <p>&#x1f4e6; <em>You want to see all products and their prices:</em> Just scroll through the table. Each row shows the product name, selling price, category, quantity, stock status, and barcode.</p>
 
-      <h4>Front Store — Stock Status</h4>
-      <p>&#x1f7e2; <strong>In Stock</strong> &mdash; more than 5 units. &#x1f7e1; <strong>Low Stock</strong> &mdash; 1 to 5 units. &#x1f534; <strong>Out of Stock</strong> &mdash; 0 units, cannot be sold.</p>
+      <h4>Stock Status Colours</h4>
+      <p>&#x1f7e2; <strong>In Stock</strong> &mdash; more than 5 units. &#x1f7e1; <strong>Low Stock</strong> &mdash; 1 to 5 units remaining. &#x1f534; <strong>Out of Stock</strong> &mdash; 0 units, cannot be sold.</p>
 
-      <h4>How Stock Changes Automatically</h4>
-      <p>Stock in the Front Store goes <strong>down</strong> when a sale is completed in Checkout. Stock goes <strong>up</strong> when a purchase is saved in Purchase Record. To add new products or manually adjust stock, go to <strong>Settings &rarr; Manage Inventory</strong>.</p>
-
-      <h4>Editing Items</h4>
-      <p>Tap the &#x270f;&#xfe0f; pencil icon on any row to edit that item &mdash; update its name, quantity, price, size, or notes. On the Front Store tab you can also update the barcode image. Tap <strong>Delete</strong> in the edit form to permanently remove an item.</p>
+      <h4>How Stock Changes</h4>
+      <p>Stock goes <strong>down</strong> when you sell in Checkout. Stock goes <strong>up</strong> when you save a purchase in Purchase Record. To add new products or manually adjust stock, go to Settings.</p>
     `
   },
   {
@@ -552,9 +543,9 @@ function App() {
       <div style={{
         display: 'flex', justifyContent: 'center', alignItems: 'center',
         height: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+        background: 'linear-gradient(160deg, #0a1f0f 0%, #0d2e18 40%, #1a4d3a 100%)'
       }}>
-        <div style={{ color: 'white', fontSize: '18px' }}>Loading...</div>
+        <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '18px' }}>Loading...</div>
       </div>
     );
   }
