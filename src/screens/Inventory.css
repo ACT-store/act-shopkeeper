@@ -171,8 +171,9 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 0.75rem;
   text-align: left;
+  vertical-align: middle;
   font-weight: 600;
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -184,11 +185,12 @@
 }
 
 .inv-table td {
-  padding: 0.65rem 1rem;
+  padding: 0.65rem 0.75rem;
   border-bottom: 1px solid var(--border, #f0f0f0);
   color: var(--text-primary, #333);
   white-space: nowrap;
   background: #ffffff;
+  vertical-align: middle;
 }
 
 .inv-table tr:last-child td { border-bottom: none; }
@@ -196,7 +198,7 @@
 /* Hover: non-frozen cells get a tinted solid background */
 .inv-data-row:hover td:not(.inv-col-frozen) { background-color: #f0f2fe !important; }
 
-/* ── Frozen columns: # and PRODUCT NAME ── */
+/* ── Frozen column: # only ── */
 .inv-col-frozen {
   position: sticky;
   z-index: 10;
@@ -226,9 +228,8 @@
 }
 
 .inv-col-name {
-  left: 0;
   min-width: 160px;
-  padding-left: 48px !important;   /* text starts after the # column */
+  padding-left: 0.75rem !important;
   border-right: 2px solid var(--border, #e0e0e0);
 }
 
@@ -373,7 +374,7 @@
   .inv-sticky-bar { padding: 10px 12px 8px; }
   .inv-add-btn    { padding: 8px 10px; font-size: 12px; }
   .inv-table th,
-  .inv-table td   { padding: 0.5rem 0.65rem; font-size: 0.72rem; }
+  .inv-table th, .inv-table td { padding: 0.5rem 0.65rem; font-size: 0.72rem; }
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -990,8 +991,7 @@
 }
 
 /* NAME column frozen behind # — lower z-index so # paints on top */
-td.inv-col-name.inv-col-frozen { z-index: 8; }
-th.inv-col-name.inv-col-frozen { z-index: 28; }
+
 
 /* ── Asset detail button ── */
 .inv-detail-btn {
