@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatDate as fmtDate, formatTime as fmtTime, toSortKey } from '../utils/formatDateTime';
 import './Withdrawals.css';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -18,15 +19,11 @@ function resolveDate(entry) {
 }
 
 function formatDate(entry) {
-  const d = resolveDate(entry);
-  if (!d) return 'N/A';
-  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+  return fmtDate(entry.date || entry.createdAt);
 }
 
 function formatTime(entry) {
-  const d = resolveDate(entry);
-  if (!d) return '';
-  return d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true });
+  return fmtTime(entry.date || entry.createdAt);
 }
 
 function toMidnight(d) { const c = new Date(d); c.setHours(0,0,0,0); return c; }
@@ -74,7 +71,7 @@ export default function Withdrawals() {
   const load = async () => {
     const data = await dataService.getWithdrawals();
     // Sort oldest → newest to calculate running balance correctly
-    const sorted = [...(data || [])].sort((a, b) => new Date(a.date||0) - new Date(b.date||0));
+    const sorted = [...(data || [])].sort((a, b) => toSortKey(a.date) - toSortKey(b.date));
     // Attach running balance
     let running = 0;
     const withBalance = sorted.map(e => {
