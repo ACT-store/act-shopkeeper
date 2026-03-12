@@ -345,6 +345,7 @@ function App() {
   const [showClosedModal, setShowClosedModal] = useState(false);
   const [closedModalMessage, setClosedModalMessage] = useState('');
   const storeListenerRef = useRef(null); // Firebase real-time listener for daily_cash
+  const shopStatusListenerRef = useRef(null); // Firebase listener for force-logout signal
 
   // ── Apply shop status from a daily_cash record (or absence of one) ────────
   const applyShopStatus = useCallback((rec) => {
@@ -402,6 +403,48 @@ function App() {
     }
   }, []);
 
+  // ── Listen for shop_status force-logout signal ────────────────────────────
+  // When the shop is closed (by any device), non-owner users are logged out.
+  const startShopStatusListener = useCallback((user) => {
+    if (shopStatusListenerRef.current) return;
+    try {
+      shopStatusListenerRef.current = onSnapshot(
+        doc(db, 'app_state', 'shop_status'),
+        async (snap) => {
+          if (!snap.exists()) return;
+          const data = snap.data();
+          if (data.status === 'closed') {
+            // Check if the current user is the shop owner — owners are not forced out
+            try {
+              const users = await dataService.getUsers();
+              const me = users.find(u =>
+                u.authUid === user?.uid ||
+                u.username === (user?.email || '').split('@')[0]
+              );
+              const isOwner = ['shop owner', 'owner'].includes((me?.role || '').toLowerCase().trim());
+              if (!isOwner) {
+                await dataService.logout();
+                window.location.reload();
+              }
+            } catch (e) {
+              console.error('Force-logout check error:', e);
+            }
+          }
+        },
+        (err) => { console.error('shop_status listener error:', err); }
+      );
+    } catch (err) {
+      console.error('Could not start shop_status listener:', err);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stopShopStatusListener = useCallback(() => {
+    if (shopStatusListenerRef.current) {
+      shopStatusListenerRef.current();
+      shopStatusListenerRef.current = null;
+    }
+  }, []);
+
   // ── One-time async check (offline fallback / first load) ─────────────────
   const checkStoreStatus = useCallback(async () => {
     try {
@@ -438,11 +481,14 @@ function App() {
       checkStoreStatus();
       // Real-time Firebase listener keeps status in sync across all devices
       startStoreListener();
+      // Listen for force-logout signal when shop is closed
+      startShopStatusListener(currentUser);
     } else {
       stopStoreListener();
+      stopShopStatusListener();
     }
-    return () => { stopStoreListener(); };
-  }, [currentUser, checkStoreStatus, startStoreListener, stopStoreListener]);
+    return () => { stopStoreListener(); stopShopStatusListener(); };
+  }, [currentUser, checkStoreStatus, startStoreListener, stopStoreListener, startShopStatusListener, stopShopStatusListener]);
 
   useEffect(() => {
     const goOnline  = () => setIsOnline(true);
