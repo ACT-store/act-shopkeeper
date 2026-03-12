@@ -62,11 +62,25 @@ const DATA_KEYS = {
   MPAISA_TRANSFERS: 'mpaisa_transfers',
 };
 
+// ── Device ID ─────────────────────────────────────────────────────────────────
+// A stable unique ID per physical device, stored in localStorage. Used to tag
+// writes so Firebase can identify which device last wrote a record.
+// Firebase is always the authority after sync — local is only authoritative while offline.
+function getOrCreateDeviceId() {
+  let id = localStorage.getItem('act_device_id');
+  if (!id) {
+    id = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    localStorage.setItem('act_device_id', id);
+  }
+  return id;
+}
+
 class DataService {
   constructor() {
     this.isOnline = navigator.onLine;
     this.syncInProgress = false;
     this.currentUser = null;
+    this.deviceId = getOrCreateDeviceId();
     // Tracks whether we've done the initial Firebase pull for debtors this
     // session.  After the first pull we trust localforage as source of truth
     // so that writes made moments ago are never overwritten by a stale read.
@@ -246,23 +260,21 @@ class DataService {
 
             if (change.type === 'removed') {
               localMap.delete(fbId);
-            } else if (change.type === 'added') {
-              // Always accept remote adds — overwrite only if local doesn't
-              // exist OR if remote is newer (covers Admin-app edits).
+            } else {
+              // Firebase is always the authority after a sync event.
+              // 'added': accept Firebase version if local doesn't exist or Firebase is newer.
+              // 'modified': always accept Firebase version (another device synced after us).
               const local = localMap.get(fbId);
-              if (!local) {
+              if (!local || change.type === 'modified') {
                 localMap.set(fbId, fbData);
               } else {
-                // If the remote version is newer, prefer it
                 const fbTime  = new Date(fbData.updatedAt || fbData.createdAt || 0).getTime();
-                const locTime = new Date(local.updatedAt || local.createdAt || 0).getTime();
-                if (fbTime > locTime) {
+                const locTime = new Date(local.updatedAt  || local.createdAt  || 0).getTime();
+                // Firebase wins on tie-break or newer timestamp
+                if (fbTime >= locTime) {
                   localMap.set(fbId, fbData);
                 }
               }
-            } else if (change.type === 'modified') {
-              // Remote update from Admin app — always accept it
-              localMap.set(fbId, fbData);
             }
           });
 
@@ -421,7 +433,34 @@ class DataService {
     }
   }
 
-  async logout() {
+  // ── PIN Authentication ───────────────────────────────────────────────────────
+  async _hashPin(pin) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(String(pin));
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async verifyPin(userIdOrUid, pin) {
+    try {
+      const list = await localforage.getItem('staff_users') || [];
+      // Match by internal id, Firebase uid, or email-derived username
+      const user = list.find(u =>
+        String(u.id) === String(userIdOrUid) ||
+        u.authUid === userIdOrUid ||
+        u.uid === userIdOrUid
+      );
+      if (!user) return { ok: false, message: 'User not found.' };
+      if (!user.pinHash) return { ok: false, message: 'No PIN set for this account. Contact your admin.', noPinSet: true };
+      const pinHash = await this._hashPin(pin);
+      if (pinHash === user.pinHash) return { ok: true };
+      return { ok: false, message: 'Incorrect PIN.' };
+    } catch (e) {
+      return { ok: false, message: 'PIN verification failed.' };
+    }
+  }
+
+    async logout() {
     try {
       this.stopDebtorsListener();
       this.stopGoodsListener();
@@ -3005,19 +3044,8 @@ class DataService {
     // ── Broadcast shop-closed status so all devices force-logout non-owners ──
     await this._broadcastShopStatus('closed', this.userName());
 
-    // Full counted cash is taken out of the shop at end of day
-    if (counted > 0) {
-      const closerName = this.userName();
-      await this.addWithdrawal({
-        type: 'out',
-        amount: counted,
-        description: `Shop closed by ${closerName} — cash taken out`,
-        source: 'close_day',
-        date: now,
-        business_date: today,
-        relatedId: today,
-      });
-    }
+    // NOTE: Cash movement is NOT recorded automatically on close.
+    // The admin must manually enter cash movement via Admin → Cash on Hand → Cash In modal.
 
     return docData;
   }
