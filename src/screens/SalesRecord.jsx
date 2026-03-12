@@ -520,12 +520,20 @@ function SalesRecord() {
     setSales(sorted);
   };
 
-  const resolveSaleDate = (sale) => {
+  // Extract YYYY-MM-DD from a timestamp without converting to Date (preserves wall-clock date)
+  const resolveSaleDateStr = (sale) => {
     const raw = sale.date || sale.timestamp || sale.createdAt;
     if (!raw) return null;
-    if (raw && typeof raw === 'object' && raw.seconds) return new Date(raw.seconds * 1000);
-    const d = new Date(raw);
-    return isNaN(d.getTime()) ? null : d;
+    if (typeof raw === 'object' && raw.seconds) {
+      const d = new Date(raw.seconds * 1000);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    if (typeof raw === 'string') {
+      // Offset-aware: "2024-03-15T10:32:00+12:00" — extract date portion directly
+      const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m) return m[1];
+    }
+    return null;
   };
 
   const toMidnight = (d) => { const c = new Date(d); c.setHours(0, 0, 0, 0); return c; };
@@ -538,19 +546,16 @@ function SalesRecord() {
         // Exact match (e.g. 'cash', 'ib', 'mpaisa') or combo contains the method (e.g. 'cash+ib')
         return pt === appliedPaymentFilter || pt.split('+').includes(appliedPaymentFilter);
       });
-    const today    = toMidnight(new Date());
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const todayDateStr = getTodayStr();
     if (appliedDateFilter === 'today')
-      filtered = filtered.filter(s => { const d = resolveSaleDate(s); return d && d >= today && d < tomorrow; });
-    if (appliedDateFilter === 'single' && appliedSelectedDate) {
-      const s = toMidnight(new Date(appliedSelectedDate)), e = new Date(s); e.setDate(e.getDate() + 1);
-      filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
-    }
-    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate) {
-      const s = toMidnight(new Date(appliedStartDate));
-      const e = new Date(toMidnight(new Date(appliedEndDate))); e.setDate(e.getDate() + 1);
-      filtered = filtered.filter(sale => { const d = resolveSaleDate(sale); return d && d >= s && d < e; });
-    }
+      filtered = filtered.filter(s => resolveSaleDateStr(s) === todayDateStr);
+    if (appliedDateFilter === 'single' && appliedSelectedDate)
+      filtered = filtered.filter(sale => resolveSaleDateStr(sale) === appliedSelectedDate);
+    if (appliedDateFilter === 'range' && appliedStartDate && appliedEndDate)
+      filtered = filtered.filter(sale => {
+        const d = resolveSaleDateStr(sale);
+        return d && d >= appliedStartDate && d <= appliedEndDate;
+      });
     setFilteredSales(filtered);
   };
 
