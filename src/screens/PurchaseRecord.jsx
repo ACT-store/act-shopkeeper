@@ -7,6 +7,7 @@ import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
 import ImageViewer from '../components/ImageViewer';
+import { formatDate, formatTime, toSortKey } from '../utils/formatDateTime';
 import './PurchaseRecord.css';
 
 // ── Shared 30-minute edit window helper ───────────────────────
@@ -601,9 +602,8 @@ function PurchaseDetailModal({ purchase, onClose, onSaved, onDeleted, onViewImag
   };
 
   if (!purchase) return null;
-  const d = new Date(purchase.date || purchase.createdAt || 0);
-  const dateStr = d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
-  const timeStr = d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
+  const dateStr = formatDate(purchase.date || purchase.createdAt);
+  const timeStr = formatTime(purchase.date || purchase.createdAt);
 
   return (
     <div className="pr-modal-overlay">
@@ -811,7 +811,7 @@ function PurchaseRecord({ storeIsOpen }) {
   const loadPurchases = async () => {
     const data = await dataService.getPurchases();
     const sorted = (data || []).sort((a,b) =>
-      new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0));
+      toSortKey(b.date||b.createdAt) - toSortKey(a.date||a.createdAt));
     setPurchases(sorted);
   };
 
@@ -865,13 +865,9 @@ function PurchaseRecord({ storeIsOpen }) {
       return `Purchases from ${formatDisplayDate(appliedStartDate)} to ${formatDisplayDate(appliedEndDate)}`;
     return 'Purchases Today';
   };
-  const formatDateTime = (p) => {
-    const d = resolveDate(p);
-    if (!d) return { date:'N/A', time:'N/A' };
-    return {
-      date: d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}),
-      time: d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
-    };
+  const formatDateTimeForPurchase = (p) => {
+    const raw = p.date || p.createdAt;
+    return { date: formatDate(raw), time: formatTime(raw) };
   };
 
   const isFilterComplete = () => {
@@ -1017,10 +1013,9 @@ function PurchaseRecord({ storeIsOpen }) {
             ]}
             rows={filtered.map(p => {
               const rawTs = p.date||p.timestamp||p.createdAt;
-              const d = rawTs?(rawTs.seconds?new Date(rawTs.seconds*1000):new Date(rawTs)):null;
               return {
-                date: d?d.toLocaleDateString('en-GB'):'N/A',
-                time: d?d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}):'N/A',
+                date: formatDate(rawTs),
+                time: formatTime(rawTs),
                 supplier: p.supplierName||'—',
                 items: (p.items||[]).map(i=>i.description||i.name||'').join(', ')||'—',
                 cost: (p.items||[]).map(i=>fmt(i.costPrice||0)).join(', ')||'—',
@@ -1059,7 +1054,7 @@ function PurchaseRecord({ storeIsOpen }) {
               ) : (() => {
                 let running = 0;
                 return filtered.map(p => {
-                  const { date, time } = formatDateTime(p);
+                  const { date, time } = formatDateTimeForPurchase(p);
                   const items = p.items || [];
                   const payType = p.paymentType || p.payment_type || 'cash';
                   const canEdit = isWithin30Mins(p);
