@@ -283,6 +283,7 @@ function EditProductModal({ good, onUpdate, onDelete, onCancel, categories }) {
     size:           good.size           || '',
     category:       good.category       || '',
     price:          good.price          !== undefined ? good.price : '',
+    cost_price:     good.cost_price     !== undefined ? good.cost_price : '',
     stock_quantity: good.stock_quantity !== undefined ? good.stock_quantity : '',
     barcodeImage:   good.barcodeImage   || good.barcode_image || good.barcodeUrl || good.barcode_url || null,
   });
@@ -305,6 +306,7 @@ function EditProductModal({ good, onUpdate, onDelete, onCancel, categories }) {
         size:           (form.size || '').trim(),
         category:       form.category,
         price:          parseFloat(form.price) || 0,
+        cost_price:     form.cost_price !== '' ? parseFloat(form.cost_price) : null,
         stock_quantity: parseInt(form.stock_quantity) || 0,
         barcodeImage:   form.barcodeImage || null,
       });
@@ -374,6 +376,14 @@ function EditProductModal({ good, onUpdate, onDelete, onCancel, categories }) {
                       onChange={e => setForm(p => ({ ...p, price: e.target.value }))} />
                   </div>
                   <div className="inv-form-group">
+                    <label>Cost Price <span className="inv-label-hint">(optional)</span></label>
+                    <input className="inv-input" type="number" min="0" step="0.01"
+                      value={form.cost_price ?? ''} placeholder="0.00"
+                      onChange={e => setForm(p => ({ ...p, cost_price: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="inv-form-row">
+                  <div className="inv-form-group" style={{flex:1}}>
                     <label>Stock Qty</label>
                     <input className="inv-input" type="number" min="0"
                       value={form.stock_quantity ?? ''} placeholder="0"
