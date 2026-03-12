@@ -523,6 +523,29 @@ class DataService {
     return new Date();
   }
 
+  // ── Timezone-aware timestamp ───────────────────────────────────────────────
+  // Returns an ISO string that embeds the device's UTC offset so that when
+  // displayed on another device the original local time is preserved.
+  // e.g. "2024-03-15T10:32:00+12:00" (Kiribati) stays 10:32 on any device.
+  nowWithTz() {
+    const now = new Date();
+    // Pad helper
+    const pad = (n) => String(n).padStart(2, '0');
+    const offsetMin = -now.getTimezoneOffset(); // getTimezoneOffset returns negative for UTC+
+    const sign  = offsetMin >= 0 ? '+' : '-';
+    const absMin = Math.abs(offsetMin);
+    const hh = pad(Math.floor(absMin / 60));
+    const mm = pad(absMin % 60);
+    // Build ISO with offset suffix
+    const y  = now.getFullYear();
+    const mo = pad(now.getMonth() + 1);
+    const d  = pad(now.getDate());
+    const h  = pad(now.getHours());
+    const mi = pad(now.getMinutes());
+    const s  = pad(now.getSeconds());
+    return `${y}-${mo}-${d}T${h}:${mi}:${s}${sign}${hh}:${mm}`;
+  }
+
   // Generic CRUD operations
   async get(key) {
     try {
@@ -724,15 +747,16 @@ class DataService {
 
   async addSale(sale) {
     const sales = await this.getSales();
-    const serverTime = new Date();
+    const nowTz = this.nowWithTz();
 
-    // Use manual date if provided (forgotten entry), otherwise now
-    const saleDate = sale.date ? new Date(sale.date) : serverTime;
+    // Use manual date if provided (forgotten entry), otherwise tz-aware now
+    const saleDate = sale.date ? new Date(sale.date) : new Date();
+    const saleDateStr = sale.date ? saleDate.toISOString() : nowTz;
 
     const newSale = {
       id: sale.id || this.generateId(),
-      date: saleDate.toISOString(),
-      timestamp: saleDate.toISOString(), // For SalesJournal compatibility
+      date: saleDateStr,
+      timestamp: saleDateStr, // For SalesJournal compatibility
       items: sale.items,
       total: parseFloat(sale.total),
       total_amount: parseFloat(sale.total),
@@ -749,7 +773,7 @@ class DataService {
       refund: sale.refund || null,
       repaymentDate: sale.repaymentDate || '',
       isDebt: sale.isDebt || false,
-      createdAt: serverTime.toISOString(),
+      createdAt: nowTz,
       ...(sale.isUnrecorded ? { isUnrecorded: true } : {}),
     };
     
@@ -2120,7 +2144,7 @@ class DataService {
     try {
       const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
       const _user = auth.currentUser;
-      const _entryDate = entry.date || new Date().toISOString();
+      const _entryDate = entry.date || this.nowWithTz();
       const _bd = entry.business_date || _entryDate.slice(0, 10);
       const newEntry = {
         id: this.generateId(),
@@ -2132,7 +2156,7 @@ class DataService {
         business_date: _bd,
         created_by_uid:  entry.created_by_uid  || _user?.uid  || null,
         created_by_name: entry.created_by_name || _user?.email || null,
-        createdAt: new Date().toISOString(),
+        createdAt: this.nowWithTz(),
         ...(entry.saleId      ? { saleId:      entry.saleId      } : {}),
         ...(entry.debtorId    ? { debtorId:    entry.debtorId    } : {}),
         ...(entry.purchaseId  ? { purchaseId:  entry.purchaseId  } : {}),
@@ -2292,7 +2316,7 @@ class DataService {
         supplierId: purchase.supplierId || null,
         creditorId: purchase.creditorId || null,
         dueDate: purchase.dueDate || null,
-        date: purchase.date || new Date().toISOString(),
+        date: purchase.date || this.nowWithTz(),
         items: purchase.items || [],
         total: parseFloat(purchase.total) || 0,
         notes: purchase.notes || '',
@@ -2301,7 +2325,7 @@ class DataService {
         paymentType,
         payment_type: paymentType,
         paymentMethod: purchase.paymentMethod || 'cash_shop', // cash_shop | owner_custody | owner_personal
-        createdAt: new Date().toISOString(),
+        createdAt: this.nowWithTz(),
       };
       purchases.push(newPurchase);
       await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
@@ -2828,6 +2852,35 @@ class DataService {
     return all.find(r => r.business_date === business_date) || null;
   }
 
+  // ── Get the shop owner's full name from users ─────────────────────────────
+  async getOwnerName() {
+    try {
+      const users = await localforage.getItem('act_users') || [];
+      const owner = users.find(u =>
+        ['shop owner', 'owner'].includes((u.role || '').toLowerCase().trim())
+      );
+      return owner?.fullName || owner?.name || 'the Owner';
+    } catch { return 'the Owner'; }
+  }
+
+  // ── Write a 'shop_status' doc to Firebase so all connected devices sync ───
+  // status: 'open' | 'closed'
+  // When status='closed', Shopkeeper devices will force-logout non-owner users.
+  async _broadcastShopStatus(status, closedByName) {
+    try {
+      if (this.isOnline && auth.currentUser) {
+        await setDoc(doc(db, 'app_state', 'shop_status'), {
+          status,
+          changedBy:   closedByName || this.userName(),
+          changedAt:   new Date().toISOString(),
+          updatedAt:   serverTimestamp(),
+        }, { merge: false });
+      }
+    } catch (err) {
+      console.error('_broadcastShopStatus error:', err);
+    }
+  }
+
   async _saveDailyCashDoc(docData) {
     const all = await localforage.getItem(DATA_KEYS.DAILY_CASH) || [];
     const idx = all.findIndex(r => r.id === docData.id);
@@ -2857,7 +2910,7 @@ class DataService {
   async openDay({ opening_float }) {
     const user  = auth.currentUser;
     const today = this.todayStr();
-    const now   = new Date().toISOString();
+    const now   = this.nowWithTz();
     const float = parseFloat(opening_float) || 0;
 
     const summary = await this.calculateExpectedCash(today);
@@ -2884,6 +2937,9 @@ class DataService {
 
     await this._saveDailyCashDoc(docData);
     await localforage.setItem('current_business_date', today);
+
+    // ── Broadcast shop-open status so all devices can resume ─────────────
+    await this._broadcastShopStatus('open', this.userName());
 
     // Record the opening float in the Cash Record table
     if (float > 0) {
@@ -2914,7 +2970,7 @@ class DataService {
   async closeDay({ counted_cash, notes }) {
     const user    = auth.currentUser;
     const today   = this.todayStr();
-    const now     = new Date().toISOString();
+    const now     = this.nowWithTz();
     const counted = parseFloat(counted_cash) || 0;
 
     const summary  = await this.calculateExpectedCash(today);
@@ -2946,6 +3002,9 @@ class DataService {
 
     await this._saveDailyCashDoc(docData);
 
+    // ── Broadcast shop-closed status so all devices force-logout non-owners ──
+    await this._broadcastShopStatus('closed', this.userName());
+
     // Full counted cash is taken out of the shop at end of day
     if (counted > 0) {
       const closerName = this.userName();
@@ -2967,7 +3026,7 @@ class DataService {
   async reopenDay(business_date, reopenFloatAmount) {
     const user    = auth.currentUser;
     const today   = business_date || this.todayStr();
-    const now     = new Date().toISOString();
+    const now     = this.nowWithTz();
     const existing = await this.getDailyCashByDate(today);
     if (!existing) throw new Error('No record found for this date.');
 
@@ -3009,7 +3068,8 @@ class DataService {
 
     await this._saveDailyCashDoc(docData);
 
-    // Record the re-opening float in the Cash Record table
+    // ── Broadcast shop-open status so all devices resume ─────────────────
+    await this._broadcastShopStatus('open', this.userName());
     const reopenFloat = reopenFloatAmount !== undefined ? reopenFloatAmount : (existing.counted_cash ?? existing.opening_float ?? 0);
     if (parseFloat(reopenFloat) > 0) {
       const reopenerName = this.userName();
@@ -3349,7 +3409,7 @@ class DataService {
   async addExpense(expenseData) {
     try {
       const expenses = await localforage.getItem(DATA_KEYS.EXPENSES) || [];
-      const now = new Date().toISOString();
+      const now = this.nowWithTz();
       const expense = {
         id: this.generateId(),
         ...expenseData,
@@ -3546,7 +3606,7 @@ class DataService {
   async addWithdrawal(data) {
     try {
       const entries = await localforage.getItem(DATA_KEYS.WITHDRAWALS) || [];
-      const now = new Date().toISOString();
+      const now = this.nowWithTz();
       const entry = {
         id: this.generateId(),
         type: data.type,           // 'out' = taken from shop, 'in' = returned to shop
