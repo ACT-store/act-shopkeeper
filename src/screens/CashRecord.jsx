@@ -6,6 +6,7 @@ import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import PdfTableButton from '../components/PdfTableButton';
+import { formatDate, formatTime, formatDateTime, toSortKey } from '../utils/formatDateTime';
 import './CashRecord.css';
 import './PurchaseRecord.css';
 
@@ -1591,13 +1592,15 @@ function CashRecord() {
 
   const loadEntries = async () => {
     const allEntries = await dataService.getCashEntries();
-    const sorted = (allEntries || []).sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    // Sort oldest → newest for running balance calculation
+    const asc = (allEntries || []).sort((a, b) => toSortKey(a.date) - toSortKey(b.date));
     let running = 0;
-    const withBalance = sorted.map(entry => {
+    const withBalance = asc.map(entry => {
       running += entry.type === TYPE_IN ? entry.amount : -entry.amount;
       return { ...entry, balance: running };
     });
     setCurrentBalance(running);
+    // Reverse for display: newest at top
     setEntries([...withBalance].reverse());
   };
 
@@ -1968,12 +1971,11 @@ function CashRecord() {
       return `${label} from ${formatDisplayDate(appliedStartDate)} to ${formatDisplayDate(appliedEndDate)}`;
     return `${label} Today`;
   };
-  const formatDateTime = (entry) => {
-    const d = resolveDate(entry);
-    if (!d) return { date:'N/A', time:'N/A' };
+  const formatDateTimeForEntry = (entry) => {
+    const raw = entry.date || entry.createdAt;
     return {
-      date: d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }),
-      time: entry.isUnrecorded ? 'UNRECORDED' : d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true }),
+      date: formatDate(raw),
+      time: entry.isUnrecorded ? 'UNRECORDED' : formatTime(raw),
     };
   };
 
@@ -2070,7 +2072,7 @@ function CashRecord() {
               {header:'Type',key:'type'},{header:'Balance',key:'balance'}
             ]}
             rows={filteredEntries.map(entry => {
-              const {date,time} = formatDateTime(entry);
+              const {date,time} = formatDateTimeForEntry(entry);
               return {
                 date, time,
                 ref: entry.invoiceRef||entry.ref||'—',
@@ -2097,7 +2099,7 @@ function CashRecord() {
                 <tr><td colSpan="8" className="cj-empty-cell">No entries found</td></tr>
               ) : (
                 filteredEntries.map(entry => {
-                  const { date, time } = formatDateTime(entry);
+                  const { date, time } = formatDateTimeForEntry(entry);
                   const editable = isWithin30Mins(entry);
                   return (
                     <tr key={entry.id} className="cj-row">
