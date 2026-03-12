@@ -4,6 +4,7 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatDate, formatTime, toSortKey } from '../utils/formatDateTime';
 import './ExpensesRecord.css';
 
 // ── Category definitions ───────────────────────────────────────────────────────
@@ -860,8 +861,7 @@ function ExpenseDetailModal({ expense, onClose, onSaved, onDeleted }) {
     } catch (e) { alert(e.message); } finally { setSaving(false); }
   };
 
-  const d = new Date(expense.date || expense.createdAt || 0);
-  const dateStr = d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const dateStr = formatDate(expense.date || expense.createdAt);
 
   return (
     <div className="er-modal-overlay">
@@ -945,7 +945,7 @@ function ExpensesRecord() {
 
   const loadExpenses = async () => {
     const data = await dataService.getExpenses();
-    const sorted = (data||[]).sort((a,b) => new Date(b.date||b.createdAt||0) - new Date(a.date||a.createdAt||0));
+    const sorted = (data||[]).sort((a,b) => toSortKey(b.date||b.createdAt) - toSortKey(a.date||a.createdAt));
     setExpenses(sorted);
   };
 
@@ -990,7 +990,7 @@ function ExpensesRecord() {
     if (appliedDate==='range' && appliedStart && appliedEnd) return `Expenses from ${formatDisplayDate(appliedStart)} to ${formatDisplayDate(appliedEnd)}`;
     return 'Expenses Today';
   };
-  const formatDate = e => { const d=resolveDate(e); if (!d) return 'N/A'; return d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }); };
+  const formatEntryDate = e => formatDate(e.date || e.createdAt);
 
   const totalRecords = filtered.length;
   const cashSpent    = filtered.filter(e=>(e.paymentMethod||'cash')==='cash').reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
@@ -1074,7 +1074,7 @@ function ExpensesRecord() {
               <tbody>
                 {filtered.map(e => (
                   <tr key={e.id} onClick={() => setViewExpense(e)}>
-                    <td style={{ whiteSpace:'nowrap', fontSize:'12px' }}>{formatDate(e)}</td>
+                    <td style={{ whiteSpace:'nowrap', fontSize:'12px' }}>{formatEntryDate(e)}</td>
                     <td className="er-td-cat">{buildExpenseDescription(e.category, e.payee, e.note, e.gender)}</td>
                     <td className="er-td-amount">{fmt(e.amount||0)}</td>
                   </tr>
