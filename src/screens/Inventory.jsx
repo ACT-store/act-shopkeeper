@@ -545,16 +545,19 @@ function Inventory() {
   const parsePackSize = (sizeStr) => {
     if (!sizeStr) return 1;
     const s = (sizeStr + '').trim();
-    // "12pcs", "12 pcs", "24ct", "6 pieces"
-    const pcsMatch = s.match(/^(\d+)\s*(pcs|pieces|pack|units?|ct|count)/i);
+    // "12pcs", "12 pcs", "24ct", "6 pieces", "30 pkts", "15 bags"
+    const pcsMatch = s.match(/^(\d+)\s*(pcs?|pieces?|pkt?s?|bags?|pack|units?|ct|count)/i);
     if (pcsMatch) return Math.max(1, parseInt(pcsMatch[1], 10));
-    // "6x500ml", "12x330ml"
-    const xMatch = s.match(/^(\d+)\s*x/i);
+    // "6x500ml", "12x330ml", "30 pkts x 500g"
+    const xMatch = s.match(/^(\d+)\s*(?:\w+\s+)?x/i);
     if (xMatch) return Math.max(1, parseInt(xMatch[1], 10));
     // bare number with no unit (e.g. "24")
     const numOnly = s.match(/^(\d+)$/);
     if (numOnly) return Math.max(1, parseInt(numOnly[1], 10));
-    // pure size measurement (e.g. "500g", "1L", "330ml") → treat as 1 unit per packet
+    // weight/volume with leading number (e.g. "50kg", "500g", "1.5L", "330ml")
+    // → the number IS the quantity of that unit (e.g. 50kg bag → 50)
+    const weightMatch = s.match(/^(\d+(?:\.\d+)?)\s*(kg|g|mg|lb|oz|l|ml|cl)\b/i);
+    if (weightMatch) return Math.max(1, parseFloat(weightMatch[1]));
     return 1;
   };
 
@@ -657,7 +660,31 @@ function Inventory() {
         ...moveItem, [srcField]: currentSrc - qty,
       });
 
-      if (moveDestTab === 'singles') {
+      if (moveDestTab === 'goods') {
+        // ── Moving TO Front Store ─────────────────────────────────────────
+        // stock delta = qty × packSize (e.g. 2 bags of salt "15 pkts x 500g" → +30 pkts)
+        const packSize   = parsePackSize(moveItem.size);
+        const stockToAdd = qty * packSize;
+        const existingGoods = await dataService.getGoods();
+        const match = (existingGoods || []).find(
+          g => (g.name || '').toLowerCase().trim() === (moveItem.name || '').toLowerCase().trim()
+        );
+        if (match) {
+          const currentStock = typeof match.stock_quantity === 'number' ? match.stock_quantity : parseInt(match.stock_quantity || 0, 10);
+          await dataService.updateGood(match.id, { stock_quantity: currentStock + stockToAdd });
+        } else {
+          // No matching Front Store product — create one
+          await dataService.addGood({
+            name:           moveItem.name     || '',
+            size:           moveItem.size     || '',
+            price:          parseFloat(moveItem.price || 0),
+            category:       moveItem.notes    || moveItem.category || 'General',
+            barcode:        moveItem.barcode  || '',
+            stock_quantity: stockToAdd,
+          });
+        }
+        await loadGoods();
+      } else if (moveDestTab === 'singles') {
         const packSize = parsePackSize(moveItem.size);
         const totalSingles = packSize * qty;
         const unitPrice = packSize > 1
@@ -1480,10 +1507,11 @@ function Inventory() {
         const filteredMoveItems = moveSearchTerm
           ? srcItems.filter(i => (i.name || '').toLowerCase().includes(moveSearchTerm.toLowerCase()))
           : srcItems;
-        // dest options: all AREA_TABS (including singles) except source; goods is never a dest
+        // dest options: when moving FROM goods → all area tabs (no goods as dest of itself)
+        //               when moving FROM area  → all area tabs + goods (Front Store), minus source
         const destOptions = isGoodsSource
-          ? AREA_TABS  // container, storeroom, tent, tent_in_store, singles
-          : AREA_TABS.filter(t => t !== moveSourceTab);
+          ? AREA_TABS
+          : ['goods', ...AREA_TABS].filter(t => t !== moveSourceTab);
         const srcUsesPcs = !isGoodsSource && (catalogueAreas.find(a => a.key === moveSourceTab)?.pcsOnly ?? false);
         const srcField   = isGoodsSource ? 'stock_quantity' : (srcUsesPcs ? 'pcs' : 'quantity');
 
@@ -1604,6 +1632,22 @@ function Inventory() {
                           </button>
                         ))}
                       </div>
+                      {moveDestTab === 'goods' && !isGoodsSource && (() => {
+                        const packSize   = parsePackSize(moveItem.size);
+                        const qtyNum     = parseInt(moveQty, 10);
+                        const stockToAdd = qtyNum > 0 ? qtyNum * packSize : packSize;
+                        return (
+                          <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--surface-alt,#f3f4f6)', borderRadius: 8, fontSize: '13px', color: 'var(--text-secondary,#6b7280)' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary,#111)' }}>Pack size: </span>
+                            {packSize} units per {moveItem.size ? `"${moveItem.size}"` : 'item'}
+                            {qtyNum > 0 && (
+                              <span style={{ marginLeft: 10 }}>
+                                → <span style={{ fontWeight: 600, color: '#059669' }}>+{qtyNum * packSize} units</span> added to Front Store stock
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {moveDestTab === 'singles' && (
                         <div style={{ marginTop: 14 }}>
                           <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', marginBottom: '5px', color: 'var(--text-primary,#111)' }}>
