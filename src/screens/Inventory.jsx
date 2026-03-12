@@ -1167,7 +1167,6 @@ function Inventory() {
                     {!pcsOnly && <th>SIZE</th>}
                     <th className="inv-col-right">PRICE</th>
                     {!pcsOnly && <th>NOTES</th>}
-                    <th className="inv-col-center">EDIT</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1205,27 +1204,6 @@ function Inventory() {
                           {item.notes || '—'}
                         </td>
                       )}
-                      <td className="inv-col-center">
-                        <button
-                          className="inv-edit-row-btn"
-                          onClick={() => {
-                            setEditingAreaItem(item);
-                            setAreaForm({
-                              name:     item.name     || '',
-                              barcode:  item.barcode  || '',
-                              quantity: item.quantity != null ? String(item.quantity) : '',
-                              pcs:      item.pcs      != null ? String(item.pcs)      : '',
-                              size:     item.size     || '',
-                              price:    item.price    != null ? String(item.price)    : '',
-                              notes:    item.notes    || '',
-                            });
-                            setShowAreaAddModal(true);
-                          }}
-                          title="Edit item"
-                        >
-                          <Pencil size={15} strokeWidth={2} />
-                        </button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1260,7 +1238,6 @@ function Inventory() {
                     <th className="inv-col-right">PRICE</th>
                     <th className="inv-col-center">STOCK</th>
                     <th>STATUS</th>
-                    <th className="inv-col-center">EDIT</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1285,27 +1262,6 @@ function Inventory() {
                         </td>
                         <td>
                           {status ? <span className={`inv-badge ${status.cls}`}>{status.label}</span> : '—'}
-                        </td>
-                        <td className="inv-col-center">
-                          <button
-                            className="inv-edit-row-btn"
-                            onClick={() => {
-                              setEditingAreaItem(item);
-                              setAreaForm({
-                                name:     item.name     || '',
-                                barcode:  '',
-                                quantity: '',
-                                pcs:      String(item.stock ?? ''),
-                                size:     '',
-                                price:    item.price    != null ? String(item.price) : '',
-                                notes:    item.category || '',
-                              });
-                              setShowAreaAddModal(true);
-                            }}
-                            title="Edit item"
-                          >
-                            <Pencil size={15} strokeWidth={2} />
-                          </button>
                         </td>
                       </tr>
                     );
@@ -1546,47 +1502,63 @@ function Inventory() {
 
                   {/* Step 1 — Select Item */}
                   <div className="inv-move-section-label">1. Select item to move</div>
-                  <div className="inv-move-search-wrap">
-                    <Search size={14} className="inv-move-search-icon" />
-                    <input
-                      className="inv-input inv-move-search-input"
-                      placeholder={`Search in ${AREA_LABELS[moveSourceTab]}…`}
-                      value={moveSearchTerm}
-                      onChange={e => { setMoveSearchTerm(e.target.value); setMoveItem(null); }}
-                    />
-                    {moveSearchTerm && (
-                      <button className="inv-move-search-clear" onPointerDown={e => e.preventDefault()} onClick={() => { setMoveSearchTerm(''); setMoveItem(null); }}>
+                  {moveItem ? (
+                    <div className="inv-move-search-wrap" style={{ cursor: 'default' }}>
+                      <Check size={14} className="inv-move-search-icon" style={{ color: '#22c55e' }} />
+                      <span className="inv-input inv-move-search-input" style={{ display: 'flex', alignItems: 'center', color: 'var(--text-primary,#111)', fontWeight: 500 }}>
+                        {moveItem.name || '—'}
+                      </span>
+                      <button
+                        className="inv-move-search-clear"
+                        onPointerDown={e => e.preventDefault()}
+                        onClick={() => { setMoveItem(null); setMoveSearchTerm(''); setMoveQty(''); setMoveDestTab(''); }}
+                      >
                         <X size={13}/>
                       </button>
-                    )}
-                  </div>
-
-                  <div className="inv-move-item-list">
-                    {filteredMoveItems.length === 0 ? (
-                      <div className="inv-move-empty">
-                        {moveSearchTerm ? `No items matching "${moveSearchTerm}"` : 'No items in this storage area.'}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="inv-move-search-wrap">
+                        <Search size={14} className="inv-move-search-icon" />
+                        <input
+                          className="inv-input inv-move-search-input"
+                          placeholder={`Search in ${AREA_LABELS[moveSourceTab]}…`}
+                          value={moveSearchTerm}
+                          onChange={e => { setMoveSearchTerm(e.target.value); setMoveItem(null); }}
+                        />
+                        {moveSearchTerm && (
+                          <button className="inv-move-search-clear" onPointerDown={e => e.preventDefault()} onClick={() => { setMoveSearchTerm(''); setMoveItem(null); }}>
+                            <X size={13}/>
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      filteredMoveItems.map(item => {
-                        const stock = item[srcField] != null && item[srcField] !== '' ? item[srcField] : 0;
-                        const isSelected = moveItem?.id === item.id;
-                        return (
-                          <div
-                            key={item.id}
-                            className={`inv-move-item-row${isSelected ? ' inv-move-item-selected' : ''}`}
-                            onClick={() => { setMoveItem(item); setMoveQty(''); }}
-                          >
-                            <div className="inv-move-item-name">{item.name || '—'}</div>
-                            <div className="inv-move-item-stock">
-                              {isGoodsSource ? 'Stock' : (srcField === 'pcs' ? 'Pcs' : 'Qty')}: <strong>{item[srcField] ?? 0}</strong>
-                              {isGoodsSource && item.size ? <span style={{ color:'#9ca3af', marginLeft: 6, fontSize:'11px' }}>({item.size})</span> : null}
-                            </div>
-                            {isSelected && <Check size={15} className="inv-move-item-check"/>}
+
+                      <div className="inv-move-item-list">
+                        {filteredMoveItems.length === 0 ? (
+                          <div className="inv-move-empty">
+                            {moveSearchTerm ? `No items matching "${moveSearchTerm}"` : 'No items in this storage area.'}
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+                        ) : (
+                          filteredMoveItems.map(item => {
+                            const stock = item[srcField] != null && item[srcField] !== '' ? item[srcField] : 0;
+                            return (
+                              <div
+                                key={item.id}
+                                className="inv-move-item-row"
+                                onClick={() => { setMoveItem(item); setMoveQty(''); }}
+                              >
+                                <div className="inv-move-item-name">{item.name || '—'}</div>
+                                <div className="inv-move-item-stock">
+                                  {isGoodsSource ? 'Stock' : (srcField === 'pcs' ? 'Pcs' : 'Qty')}: <strong>{item[srcField] ?? 0}</strong>
+                                  {isGoodsSource && item.size ? <span style={{ color:'#9ca3af', marginLeft: 6, fontSize:'11px' }}>({item.size})</span> : null}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
+                  )}
 
                   {/* Step 2 — Quantity */}
                   {moveItem && (
