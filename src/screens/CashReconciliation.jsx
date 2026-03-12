@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import dataService from '../services/dataService';
 import { auth } from '../services/firebaseConfig';
+import { formatTime } from '../utils/formatDateTime';
 import './CashReconciliation.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -23,13 +24,8 @@ function formatDateLabel(dateStr) {
   return d.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'numeric' });
 }
 
-function formatTime(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
-}
 
 // ── Detail Modal ─────────────────────────────────────────────────────────────
-
 function buildNoteLabel(counted, expected, notes, closedByName) {
   if (counted === null || counted === undefined || expected === null || expected === undefined) return null;
   const diff = parseFloat(counted) - parseFloat(expected);
@@ -255,6 +251,10 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
   const [detailRecord, setDetailRecord] = useState(null);
   const [showClosedTabModal, setShowClosedTabModal] = useState(false);
 
+  // ── Close shop confirmation modal ─────────────────────────────────────────
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [ownerName, setOwnerName]               = useState('the Owner');
+
   const reopenBtnRef = React.useRef(null);
 
   const { fieldErrors, showError, clearFieldError } = useValidation();
@@ -282,6 +282,9 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
       setRecords((allRecs || []).sort((a, b) => b.business_date.localeCompare(a.business_date)));
       const summary = await dataService.calculateExpectedCash(today);
       setLiveSummary(summary);
+      // Fetch owner name for close-shop confirmation
+      const oName = await dataService.getOwnerName();
+      setOwnerName(oName);
     } catch (e) {
       console.error('CashReconciliation loadData error:', e);
     } finally {
@@ -319,14 +322,14 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
 
   // ── Close Day ────────────────────────────────────────────────────────────
 
-  const handleCloseDay = async () => {
+  const handleCloseDayConfirmed = async () => {
+    setShowCloseConfirm(false);
     const counted = parseFloat(countedCash);
     if (isNaN(counted) || counted < 0) return showError('cr_counted', 'Please enter the counted cash amount');
 
     const summary = await dataService.calculateExpectedCash(today);
     const diff = counted - summary.expected;
 
-    // Notes required if not balanced
     if (diff !== 0 && !closeNotes.trim()) {
       alert(diff < 0
         ? 'Notes are required when cash is SHORT. Please explain why.'
@@ -343,6 +346,23 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
     } catch (e) {
       alert('Failed to close day: ' + e.message);
     } finally { setCloseSaving(false); }
+  };
+
+  const handleCloseDay = async () => {
+    const counted = parseFloat(countedCash);
+    if (isNaN(counted) || counted < 0) return showError('cr_counted', 'Please enter the counted cash amount');
+
+    const summary = await dataService.calculateExpectedCash(today);
+    const diff = counted - summary.expected;
+
+    if (diff !== 0 && !closeNotes.trim()) {
+      alert(diff < 0
+        ? 'Notes are required when cash is SHORT. Please explain why.'
+        : 'Notes are required when cash is SURPLUS. Please explain why.');
+      return;
+    }
+    // Show close-shop confirmation modal
+    setShowCloseConfirm(true);
   };
 
   // ── Render helpers ───────────────────────────────────────────────────────
@@ -724,6 +744,53 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
             >
               OK &mdash; Go to Cash Reconciliation
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Close Shop confirmation modal ── */}
+      {showCloseConfirm && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:9999,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'
+        }}>
+          <div style={{
+            background:'var(--surface, #fff)', color:'var(--text-primary, #1a1a1a)',
+            borderRadius:'18px', padding:'28px 24px', maxWidth:'370px', width:'100%',
+            textAlign:'center', boxShadow:'0 24px 64px rgba(0,0,0,0.35)'
+          }}>
+            <div style={{ fontSize:'52px', marginBottom:'14px' }}>🔒</div>
+            <h3 style={{ margin:'0 0 10px', fontSize:'19px', fontWeight:800 }}>Close the Shop?</h3>
+            <p style={{ margin:'0 0 8px', fontSize:'14px', lineHeight:'1.65', color:'var(--text-secondary, #555)' }}>
+              Are you sure you want to close the shop for today?
+            </p>
+            <p style={{ margin:'0 0 22px', fontSize:'13px', lineHeight:'1.6', color:'#dc2626', fontWeight:600 }}>
+              ⚠️ All logged-in staff will be automatically signed out.<br/>
+              Re-opening the shop can only be done by <strong>{ownerName}</strong> via the ACT Admin app or Cash Reconciliation.
+            </p>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button
+                onClick={() => setShowCloseConfirm(false)}
+                style={{
+                  flex:1, padding:'13px', fontSize:'15px', fontWeight:600,
+                  background:'var(--surface-alt, #f3f4f6)', color:'var(--text-primary, #111)',
+                  border:'1px solid var(--border, #e5e7eb)', borderRadius:'10px', cursor:'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCloseDayConfirmed}
+                disabled={closeSaving}
+                style={{
+                  flex:1, padding:'13px', fontSize:'15px', fontWeight:700,
+                  background:'linear-gradient(135deg, #dc2626, #991b1b)', color:'#fff',
+                  border:'none', borderRadius:'10px', cursor:'pointer',
+                }}
+              >
+                {closeSaving ? 'Closing…' : '🔒 Yes, Close Shop'}
+              </button>
+            </div>
           </div>
         </div>
       )}
