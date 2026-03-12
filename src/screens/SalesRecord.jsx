@@ -3,6 +3,7 @@ import { Edit2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
 import PdfTableButton from '../components/PdfTableButton';
+import { formatDate, formatTime, formatDateTime, toSortKey } from '../utils/formatDateTime';
 import './SalesRecord.css';
 
 // ── Shared 30-minute edit window helper ──────────────────────────────────────
@@ -79,17 +80,9 @@ function SaleDetailModal({ sale, onClose, onEdit, canEdit, fmt }) {
   const cashReceived = parseFloat(sale.cashReceived || 0);
   const changeGiven = parseFloat(sale.changeGiven || 0);
 
-  const resolveSaleDate = (s) => {
-    const raw = s.date || s.timestamp || s.createdAt;
-    if (!raw) return null;
-    if (raw && typeof raw === 'object' && raw.seconds) return new Date(raw.seconds * 1000);
-    const d = new Date(raw);
-    return isNaN(d.getTime()) ? null : d;
-  };
-
-  const d = resolveSaleDate(sale);
-  const dateStr = d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
-  const timeStr = d ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
+  const rawDate = sale.date || sale.timestamp || sale.createdAt;
+  const dateStr = formatDate(rawDate);
+  const timeStr = sale.isUnrecorded ? 'UNRECORDED' : formatTime(rawDate);
 
   const payBadgeStyle = (() => {
     if (payType === 'cash')   return { background: '#d1fae5', color: '#065f46' };
@@ -508,11 +501,9 @@ function SalesRecord() {
   // Re-render whenever another device records a sale (including credit sales)
   useEffect(() => {
     const unsubscribe = dataService.onSalesChange((updatedSales) => {
-      const sorted = (updatedSales || []).sort((a, b) => {
-        const dateA = new Date(a.date || a.createdAt || a.timestamp || 0);
-        const dateB = new Date(b.date || b.createdAt || b.timestamp || 0);
-        return dateB - dateA;
-      });
+      const sorted = (updatedSales || []).sort((a, b) =>
+        toSortKey(b.date || b.createdAt || b.timestamp) - toSortKey(a.date || a.createdAt || a.timestamp)
+      );
       setSales(sorted);
     });
     return () => unsubscribe();
@@ -523,11 +514,9 @@ function SalesRecord() {
 
   const loadSales = async () => {
     const data = await dataService.getSales();
-    const sorted = (data || []).sort((a, b) => {
-      const dateA = new Date(a.date || a.createdAt || a.timestamp || 0);
-      const dateB = new Date(b.date || b.createdAt || b.timestamp || 0);
-      return dateB - dateA;
-    });
+    const sorted = (data || []).sort((a, b) =>
+      toSortKey(b.date || b.createdAt || b.timestamp) - toSortKey(a.date || a.createdAt || a.timestamp)
+    );
     setSales(sorted);
   };
 
@@ -619,12 +608,11 @@ function SalesRecord() {
     return `${label} Today`;
   };
 
-  const formatDateTime = (sale) => {
-    const d = resolveSaleDate(sale);
-    if (!d) return { date: 'N/A', time: 'N/A' };
+  const formatDateTimeForSale = (sale) => {
+    const raw = sale.date || sale.timestamp || sale.createdAt;
     return {
-      date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      time: sale.isUnrecorded ? 'UNRECORDED' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      date: formatDate(raw),
+      time: sale.isUnrecorded ? 'UNRECORDED' : formatTime(raw),
     };
   };
 
@@ -643,7 +631,9 @@ function SalesRecord() {
   // ── Reload helper ──────────────────────────────────────────────────────────
   const reloadSales = async () => {
     const data = await dataService.getSales();
-    setSales((data || []).sort((a, b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0)));
+    setSales((data || []).sort((a, b) =>
+      toSortKey(b.date || b.createdAt) - toSortKey(a.date || a.createdAt)
+    ));
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -794,7 +784,7 @@ function SalesRecord() {
               {header:'Payment',key:'payment'},{header:'Customer',key:'customer'}
             ]}
             rows={filteredSales.flatMap(sale => {
-              const {date, time} = formatDateTime(sale);
+              const {date, time} = formatDateTimeForSale(sale);
               const total = getSaleTotal(sale); const payment = getSalePayType(sale); const customer = getSaleCustomer(sale);
               const items = sale.items && sale.items.length > 0 ? sale.items : [null];
               return items.map((item, idx) => ({
@@ -823,7 +813,7 @@ function SalesRecord() {
                 <tr><td colSpan="8" className="empty-cell">No sales records found</td></tr>
               ) : (
                 filteredSales.map(sale => {
-                  const { date, time } = formatDateTime(sale);
+                  const { date, time } = formatDateTimeForSale(sale);
                   const total    = getSaleTotal(sale);
                   const payType  = getSalePayType(sale);
                   const customer = getSaleCustomer(sale);
