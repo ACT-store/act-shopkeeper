@@ -369,6 +369,38 @@ class DataService {
   async login(email, password) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      // ── App access check ──────────────────────────────────────────────────
+      // After Firebase Auth succeeds, verify the user has permission to access
+      // the Shopkeeper app. Check Firestore first (online), fall back to the
+      // locally-cached users list (offline).
+      try {
+        const uid = userCredential.user.uid;
+        let userRecord = null;
+
+        if (this.isOnline) {
+          const snap = await getDocs(collection(db, 'users'));
+          const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          await localforage.setItem('act_users', allUsers);
+          userRecord = allUsers.find(u => u.authUid === uid || u.id === uid);
+        } else {
+          const cached = await localforage.getItem('act_users') || [];
+          userRecord = cached.find(u => u.authUid === uid || u.id === uid);
+        }
+
+        if (userRecord) {
+          const appAccess = userRecord.appAccess || ['shopkeeper'];
+          if (!appAccess.includes('shopkeeper')) {
+            await signOut(auth).catch(() => {});
+            return { success: false, error: 'You do not have permission to access the Shopkeeper app. Contact your admin.' };
+          }
+        }
+      } catch (accessErr) {
+        // If the check itself fails, allow login rather than blocking the user
+        console.warn('appAccess check failed, allowing login:', accessErr);
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       this.currentUser = userCredential.user;
       // Reset so the next getDebtors() call pulls a fresh copy from Firebase
       this._debtorsFetchedFromFirebase = false;
