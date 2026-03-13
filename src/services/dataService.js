@@ -379,12 +379,14 @@ class DataService {
         let userRecord = null;
 
         if (this.isOnline) {
-          const snap = await getDocs(collection(db, 'users'));
+          // Admin stores users in 'staff_users' — fetch and cache locally so
+          // verifyPin (which reads from localforage 'staff_users') also works.
+          const snap = await getDocs(collection(db, 'staff_users'));
           const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          await localforage.setItem('act_users', allUsers);
+          await localforage.setItem('staff_users', allUsers);
           userRecord = allUsers.find(u => u.authUid === uid || u.id === uid);
         } else {
-          const cached = await localforage.getItem('act_users') || [];
+          const cached = await localforage.getItem('staff_users') || [];
           userRecord = cached.find(u => u.authUid === uid || u.id === uid);
         }
 
@@ -526,30 +528,57 @@ class DataService {
   // Check if user has persistent login
   async checkPersistedLogin() {
     try {
-      // Firebase Auth automatically restores sessions with browserLocalPersistence
-      // We just need to wait for Firebase to restore the auth state
+      // Firebase Auth automatically restores sessions with browserLocalPersistence.
+      // We wait for Firebase to restore the auth state, then re-verify appAccess
+      // so that a user whose permission was revoked cannot bypass login on reopen.
       return new Promise((resolve) => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-          unsubscribe(); // Stop listening after first check
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          unsubscribe();
           if (user) {
+            // ── Re-check appAccess on session restore ─────────────────────
+            try {
+              let staffUsers = await localforage.getItem('staff_users') || [];
+
+              // If online, always refresh from Firestore to pick up any changes
+              // made in Admin (e.g. permissions revoked) since last login.
+              if (navigator.onLine) {
+                try {
+                  const snap = await getDocs(collection(db, 'staff_users'));
+                  staffUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                  await localforage.setItem('staff_users', staffUsers);
+                } catch (_) { /* use cached list if fetch fails */ }
+              }
+
+              const userRecord = staffUsers.find(u => u.authUid === user.uid || u.id === user.uid);
+              if (userRecord) {
+                const appAccess = userRecord.appAccess || ['shopkeeper'];
+                if (!appAccess.includes('shopkeeper')) {
+                  // Permission has been removed — sign out and force login screen
+                  await signOut(auth).catch(() => {});
+                  await localforage.removeItem('auth_user');
+                  resolve(null);
+                  return;
+                }
+              }
+            } catch (accessErr) {
+              console.warn('appAccess check on session restore failed:', accessErr);
+            }
+            // ─────────────────────────────────────────────────────────────
+
             this.currentUser = user;
-            // Also store in localforage for backup
             localforage.setItem('auth_user', {
               uid: user.uid,
               email: user.email,
               loggedInAt: new Date().toISOString()
             }).catch(err => console.error('Error storing auth state:', err));
-            // Start real-time listeners for debtors, goods and sales
             this.startDebtorsListener();
             this.startGoodsListener();
             this.startSalesListener();
             resolve(user);
           } else {
-            // Check if we have backup auth state
             localforage.getItem('auth_user').then(authUser => {
               if (authUser) {
                 console.log('User was logged in but Firebase session expired');
-                // Clear the backup since Firebase session is gone
                 localforage.removeItem('auth_user');
               }
               resolve(null);
