@@ -1,0 +1,28 @@
+{
+  "assets": {
+    "android": {
+      "icon": {
+        "foregroundImage": "public/act-logo.png",
+        "foregroundScaling": 0.65,
+        "backgroundColor": "#0d2e18"
+      },
+      "iconForegroundImage": "public/act-logo.png",
+      "iconBackgroundColor": "#0d2e18",
+      "splash": {
+        "image": "public/act-logo.png",
+        "backgroundColor": "#0d2e18"
+      }
+    },
+    "ios": {
+      "icon": {
+        "foregroundImage": "public/act-logo.png",
+        "foregroundScaling": 0.65,
+        "backgroundColor": "#0d2e18"
+      },
+      "splash": {
+        "image": "public/act-logo.png",
+        "backgroundColor": "#0d2e18"
+      }
+    }
+  }
+}
