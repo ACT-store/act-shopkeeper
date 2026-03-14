@@ -516,7 +516,7 @@ function Inventory() {
   const [areaLastSynced, setAreaLastSynced] = useState({});
   const [showAreaAddModal,  setShowAreaAddModal]  = useState(false);
   const [editingAreaItem,   setEditingAreaItem]   = useState(null);
-  const AREA_FORM_BLANK = { name:'', barcode:'', quantity:'', pcs:'', size:'', price:'', notes:'' };
+  const AREA_FORM_BLANK = { name:'', barcode:'', quantity:'', pcs:'', size:'', price:'', notes:'', unitsPerPack:'' };
   const [areaForm, setAreaForm] = useState(AREA_FORM_BLANK);
   const [areaSaving, setAreaSaving] = useState(false);
 
@@ -528,6 +528,7 @@ function Inventory() {
   const [moveQty,        setMoveQty]        = useState('');
   const [moveDestTab,    setMoveDestTab]    = useState('');
   const [moveUnitName,   setMoveUnitName]   = useState('');     // unit label for Singles (e.g. "roll")
+  const [moveSellWhole,  setMoveSellWhole]  = useState(false);  // true = sell bag as-is; false = break into units
   const [moveSaving,     setMoveSaving]     = useState(false);
 
   // Extract a singular unit name from a size/pack string e.g. "25 rolls" → "roll"
@@ -552,8 +553,13 @@ function Inventory() {
     singles:       '🔢 Singles',
   };
 
-  // Parse pack size from a size string like "12pcs", "6x500ml", "24", "500g" → number
-  const parsePackSize = (sizeStr) => {
+  // Returns the number of individual units in one bag/carton.
+  // Priority: explicit unitsPerPack field on the item → parse size string → 1
+  const parsePackSize = (sizeStr, item) => {
+    if (item && item.unitsPerPack) {
+      const n = parseInt(item.unitsPerPack, 10);
+      if (!isNaN(n) && n > 0) return n;
+    }
     if (!sizeStr) return 1;
     const s = (sizeStr + '').trim();
     // "12pcs", "12 pcs", "24ct", "6 pieces", "30 pkts", "15 bags"
@@ -565,8 +571,7 @@ function Inventory() {
     // bare number with no unit (e.g. "24")
     const numOnly = s.match(/^(\d+)$/);
     if (numOnly) return Math.max(1, parseInt(numOnly[1], 10));
-    // bare weight/volume like "50kg", "500g", "1L" — these describe a single unit,
-    // NOT a pack count. Always return 1.
+    // bare weight/volume like "25kg", "500g", "1L" — single unit descriptor, not a count
     return 1;
   };
 
@@ -577,6 +582,7 @@ function Inventory() {
     setMoveQty('');
     setMoveDestTab('');
     setMoveUnitName('');
+    setMoveSellWhole(false);
     setShowMoveModal(true);
   };
 
@@ -603,7 +609,7 @@ function Inventory() {
 
         if (moveDestTab === 'singles') {
           // Expand packs → individual units
-          const packSize = parsePackSize(good.size);
+          const packSize = parsePackSize(good.size, good);
           const totalSingles = packSize * qty;
           const unitPrice = packSize > 1
             ? parseFloat((parseFloat(good.price || 0) / packSize).toFixed(2))
@@ -672,9 +678,10 @@ function Inventory() {
 
       if (moveDestTab === 'goods') {
         // ── Moving TO Front Store ─────────────────────────────────────────
-        // stock delta = qty × packSize (e.g. 2 bags of salt "15 pkts x 500g" → +30 pkts)
-        const packSize   = parsePackSize(moveItem.size);
-        const stockToAdd = qty * packSize;
+        // moveSellWhole=true  → sell the bag/carton as-is (+qty units of this item)
+        // moveSellWhole=false → break into individual units (+qty × unitsPerPack)
+        const packSize   = parsePackSize(moveItem.size, moveItem);
+        const stockToAdd = moveSellWhole ? qty : qty * packSize;
         const existingGoods = await dataService.getGoods();
         const match = (existingGoods || []).find(
           g => (g.name || '').toLowerCase().trim() === (moveItem.name || '').toLowerCase().trim()
@@ -695,7 +702,7 @@ function Inventory() {
         }
         await loadGoods();
       } else if (moveDestTab === 'singles') {
-        const packSize = parsePackSize(moveItem.size);
+        const packSize = parsePackSize(moveItem.size, moveItem);
         const totalSingles = packSize * qty;
         const unitPrice = packSize > 1
           ? parseFloat((parseFloat(moveItem.price || 0) / packSize).toFixed(2))
@@ -1203,13 +1210,32 @@ function Inventory() {
                     {!pcsOnly && <th className="inv-col-center">CTN / QTY</th>}
                     <th className="inv-col-center">PCS</th>
                     {!pcsOnly && <th>SIZE</th>}
+                    {!pcsOnly && <th className="inv-col-center">UNITS/PACK</th>}
                     <th className="inv-col-right">PRICE</th>
                     {!pcsOnly && <th>NOTES</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((item, idx) => (
-                    <tr key={item.id} className="inv-data-row">
+                    <tr
+                      key={item.id}
+                      className="inv-data-row"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        setEditingAreaItem(item);
+                        setAreaForm({
+                          name:         item.name         || '',
+                          barcode:      item.barcode      || '',
+                          quantity:     item.quantity     ?? '',
+                          pcs:          item.pcs          ?? '',
+                          size:         item.size         || '',
+                          price:        item.price        != null ? String(item.price) : '',
+                          notes:        item.notes        || '',
+                          unitsPerPack: item.unitsPerPack != null ? String(item.unitsPerPack) : '',
+                        });
+                        setShowAreaAddModal(true);
+                      }}
+                    >
                       <td className="inv-col-frozen inv-col-num inv-num-cell">{idx + 1}</td>
                       <td className="inv-col-name inv-name-cell">
                         <span className="inv-cell-value">{item.name || '—'}</span>
@@ -1232,6 +1258,11 @@ function Inventory() {
                       {!pcsOnly && (
                         <td className="inv-size-cell">
                           <span className="inv-cell-value">{item.size || '—'}</span>
+                        </td>
+                      )}
+                      {!pcsOnly && (
+                        <td className="inv-col-center">
+                          <span className="inv-cell-value">{item.unitsPerPack != null && item.unitsPerPack !== '' ? item.unitsPerPack : '—'}</span>
                         </td>
                       )}
                       <td className="inv-col-right">
@@ -1406,9 +1437,17 @@ function Inventory() {
 
                     {!pcsOnly && (
                       <div className="inv-form-group">
-                        <label>Size <span className="inv-label-hint">(e.g. 50 x 1kg, 24 x 300g, 6 x 1L)</span></label>
-                        <input className="inv-input" value={areaForm.size} placeholder="e.g. 50 x 1kg, 24 x 300g"
+                        <label>Size <span className="inv-label-hint">(e.g. 25kg bag, 24 x 300g)</span></label>
+                        <input className="inv-input" value={areaForm.size} placeholder="e.g. 25kg bag, 24 x 300g"
                           onChange={e => setAreaForm(f => ({...f, size: e.target.value}))} />
+                      </div>
+                    )}
+
+                    {!pcsOnly && (
+                      <div className="inv-form-group">
+                        <label>Units per pack <span className="inv-label-hint">(how many individual units in one bag/carton)</span></label>
+                        <input className="inv-input" type="number" min="1" value={areaForm.unitsPerPack} placeholder="e.g. 25 for a 25kg bag repacked into 1kg bags"
+                          onChange={e => setAreaForm(f => ({...f, unitsPerPack: e.target.value}))} />
                       </div>
                     )}
 
@@ -1631,6 +1670,7 @@ function Inventory() {
                             className={`inv-move-dest-btn${moveDestTab === tab ? ' inv-move-dest-btn-active' : ''}`}
                             onClick={() => {
                               setMoveDestTab(tab);
+                              setMoveSellWhole(false);
                               if (tab === 'singles') {
                                 const size = moveItem.size || (isGoodsSource ? moveItem.size : '');
                                 setMoveUnitName(parseUnitName(size));
@@ -1644,17 +1684,71 @@ function Inventory() {
                         ))}
                       </div>
                       {moveDestTab === 'goods' && !isGoodsSource && (() => {
-                        const packSize   = parsePackSize(moveItem.size);
-                        const qtyNum     = parseInt(moveQty, 10);
-                        const stockToAdd = qtyNum > 0 ? qtyNum * packSize : packSize;
+                        const packSize = parsePackSize(moveItem.size, moveItem);
+                        const qtyNum   = parseInt(moveQty, 10) || 0;
+                        const hasUnits = packSize > 1;
                         return (
-                          <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--surface-alt,#f3f4f6)', borderRadius: 8, fontSize: '13px', color: 'var(--text-secondary,#6b7280)' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text-primary,#111)' }}>Pack size: </span>
-                            {packSize} units per {moveItem.size ? `"${moveItem.size}"` : 'item'}
-                            {qtyNum > 0 && (
-                              <span style={{ marginLeft: 10 }}>
-                                → <span style={{ fontWeight: 600, color: '#059669' }}>+{qtyNum * packSize} units</span> added to Front Store stock
-                              </span>
+                          <div style={{ marginTop: 14 }}>
+                            {hasUnits && (
+                              <>
+                                <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: 8, color: 'var(--text-primary,#111)' }}>
+                                  How will this be sold in Front Store?
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  {/* Option A: break into units */}
+                                  <label style={{
+                                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                                    padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                                    border: `2px solid ${!moveSellWhole ? '#059669' : 'var(--border,#e5e7eb)'}`,
+                                    background: !moveSellWhole ? 'rgba(5,150,105,0.06)' : 'var(--surface-alt,#f3f4f6)',
+                                  }}>
+                                    <input type="radio" name="sellMode" checked={!moveSellWhole}
+                                      onChange={() => setMoveSellWhole(false)}
+                                      style={{ marginTop: 2, accentColor: '#059669' }} />
+                                    <div>
+                                      <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary,#111)' }}>
+                                        Break into {packSize} individual units
+                                      </div>
+                                      <div style={{ fontSize: '12px', color: '#6b7280', marginTop: 2 }}>
+                                        {qtyNum > 0
+                                          ? `+${qtyNum * packSize} units added to Front Store`
+                                          : `Each bag/carton → ${packSize} units in Front Store`}
+                                      </div>
+                                    </div>
+                                  </label>
+                                  {/* Option B: sell whole */}
+                                  <label style={{
+                                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                                    padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                                    border: `2px solid ${moveSellWhole ? '#2563eb' : 'var(--border,#e5e7eb)'}`,
+                                    background: moveSellWhole ? 'rgba(37,99,235,0.06)' : 'var(--surface-alt,#f3f4f6)',
+                                  }}>
+                                    <input type="radio" name="sellMode" checked={moveSellWhole}
+                                      onChange={() => setMoveSellWhole(true)}
+                                      style={{ marginTop: 2, accentColor: '#2563eb' }} />
+                                    <div>
+                                      <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary,#111)' }}>
+                                        Sell whole bag/carton as-is
+                                      </div>
+                                      <div style={{ fontSize: '12px', color: '#6b7280', marginTop: 2 }}>
+                                        {qtyNum > 0
+                                          ? `+${qtyNum} unit${qtyNum !== 1 ? 's' : ''} added to Front Store`
+                                          : 'Moves as-is — no unpacking'}
+                                      </div>
+                                    </div>
+                                  </label>
+                                </div>
+                              </>
+                            )}
+                            {!hasUnits && (
+                              <div style={{ padding: '10px 12px', background: 'var(--surface-alt,#f3f4f6)', borderRadius: 8, fontSize: '13px', color: 'var(--text-secondary,#6b7280)' }}>
+                                {qtyNum > 0
+                                  ? <><span style={{ fontWeight: 600, color: '#059669' }}>+{qtyNum}</span> unit{qtyNum !== 1 ? 's' : ''} added to Front Store stock</>
+                                  : 'Set a quantity above to see the preview.'}
+                                <div style={{ marginTop: 4, fontSize: '11px' }}>
+                                  💡 Tip: add a <strong>Units per pack</strong> value to this item to enable break-down or sell-whole options.
+                                </div>
+                              </div>
                             )}
                           </div>
                         );
