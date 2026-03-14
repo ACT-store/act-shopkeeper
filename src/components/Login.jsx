@@ -59,6 +59,7 @@ function Login({ onLoginSuccess }) {
   const handlePinVerify = async (pin) => {
     const result = await dataService.verifyPin(pendingUser.userId || pendingUser.uid, pin);
     if (result.ok) {
+      sessionStorage.setItem('pin_verified', '1');
       onLoginSuccess(pendingUser);
     }
     return result;
