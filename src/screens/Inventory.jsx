@@ -357,10 +357,10 @@ function EditProductModal({ good, onUpdate, onDelete, onCancel, categories }) {
                 </div>
 
                 <div className="inv-form-group">
-                  <label>Size * <span className="inv-label-hint">(e.g. 300g, 1L, 2kg)</span></label>
+                  <label>Size * <span className="inv-label-hint">(e.g. 1kg, 300g, 1L, 500ml)</span></label>
                   <input className="inv-input" value={form.size}
                     onChange={e => setForm(p => ({ ...p, size: e.target.value }))}
-                    placeholder="e.g. 300g, 1L, 2kg" />
+                    placeholder="e.g. 1kg, 300g, 1L" />
                 </div>
 
                 <div className="inv-form-group">
@@ -558,16 +558,14 @@ function Inventory() {
     // "12pcs", "12 pcs", "24ct", "6 pieces", "30 pkts", "15 bags"
     const pcsMatch = s.match(/^(\d+)\s*(pcs?|pieces?|pkt?s?|bags?|pack|units?|ct|count)/i);
     if (pcsMatch) return Math.max(1, parseInt(pcsMatch[1], 10));
-    // "6x500ml", "12x330ml", "30 pkts x 500g"
+    // "50 x 1kg", "24 x 300g", "6 x 1L", "12 x 330ml"
     const xMatch = s.match(/^(\d+)\s*(?:\w+\s+)?x/i);
     if (xMatch) return Math.max(1, parseInt(xMatch[1], 10));
     // bare number with no unit (e.g. "24")
     const numOnly = s.match(/^(\d+)$/);
     if (numOnly) return Math.max(1, parseInt(numOnly[1], 10));
-    // weight/volume with leading number (e.g. "50kg", "500g", "1.5L", "330ml")
-    // → the number IS the quantity of that unit (e.g. 50kg bag → 50)
-    const weightMatch = s.match(/^(\d+(?:\.\d+)?)\s*(kg|g|mg|lb|oz|l|ml|cl)\b/i);
-    if (weightMatch) return Math.max(1, parseFloat(weightMatch[1]));
+    // bare weight/volume like "50kg", "500g", "1L" — these describe a single unit,
+    // NOT a pack count. Always return 1.
     return 1;
   };
 
@@ -1405,8 +1403,8 @@ function Inventory() {
 
                     {!pcsOnly && (
                       <div className="inv-form-group">
-                        <label>Size <span className="inv-label-hint">(optional, e.g. 300g, 1L)</span></label>
-                        <input className="inv-input" value={areaForm.size} placeholder="e.g. 300g, 1L"
+                        <label>Size <span className="inv-label-hint">(e.g. 50 x 1kg, 24 x 300g, 6 x 1L)</span></label>
+                        <input className="inv-input" value={areaForm.size} placeholder="e.g. 50 x 1kg, 24 x 300g"
                           onChange={e => setAreaForm(f => ({...f, size: e.target.value}))} />
                       </div>
                     )}
