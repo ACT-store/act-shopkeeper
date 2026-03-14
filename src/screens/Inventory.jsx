@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Search, X, ZoomIn, Camera, Upload, Check, Crop, RotateCcw, Save, Pencil, FileText } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
+import { logAction } from '../services/activityLogger';
 import { useCurrency } from '../hooks/useCurrency';
 import './Inventory.css';
 
@@ -644,6 +645,7 @@ function Inventory() {
           }
           if (areaItems[moveDestTab]) await loadAreaItems(moveDestTab);
         }
+        await logAction('STOCK_MOVE', `Moved ${qty} x ${good.name} from Front Store → ${AREA_LABELS[moveDestTab] || moveDestTab}`);
         setShowMoveModal(false);
       } catch (err) {
         console.error('Move stock error (goods):', err);
@@ -735,6 +737,7 @@ function Inventory() {
         if (areaItems[moveDestTab]) await loadAreaItems(moveDestTab);
       }
       await loadAreaItems(moveSourceTab);
+      await logAction('STOCK_MOVE', `Moved ${qty} x ${moveItem.name} from ${AREA_LABELS[moveSourceTab] || moveSourceTab} → ${AREA_LABELS[moveDestTab] || moveDestTab}`);
       setShowMoveModal(false);
     } catch (err) {
       console.error('Move stock error:', err);
