@@ -534,6 +534,7 @@ function App() {
   };
 
   const handleLogout = async () => {
+    sessionStorage.removeItem('pin_verified');
     await dataService.logout();
     setCurrentUser(null);
     setUserEmail('');
