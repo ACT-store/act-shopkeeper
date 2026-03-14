@@ -565,6 +565,16 @@ class DataService {
             }
             // ─────────────────────────────────────────────────────────────
 
+            // PIN gate: sessionStorage clears when the app is closed.
+            // If pin_verified is not set the user closed before completing PIN
+            // — sign out and force the full login + PIN flow again.
+            if (!sessionStorage.getItem('pin_verified')) {
+              await signOut(auth).catch(() => {});
+              await localforage.removeItem('auth_user');
+              resolve(null);
+              return;
+            }
+
             this.currentUser = user;
             localforage.setItem('auth_user', {
               uid: user.uid,
