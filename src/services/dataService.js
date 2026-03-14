@@ -23,7 +23,8 @@ import {
   where,
   onSnapshot,
   writeBatch,
-  serverTimestamp
+  serverTimestamp,
+  increment
 } from 'firebase/firestore';
 
 // Configure localforage
@@ -136,6 +137,46 @@ class DataService {
     for (const cb of this._goodsSubscribers) {
       try { cb(goods); } catch (e) { console.error('Goods subscriber error:', e); }
     }
+  }
+
+  // ── Atomic stock delta helpers ────────────────────────────────────────────
+  // Instead of overwriting stock_quantity with an absolute number, we always
+  // apply a DELTA (e.g. -3 for selling 3, +5 for a purchase of 5). Firebase's
+  // increment() makes this atomic — concurrent writes from multiple devices
+  // each add their own delta on top of the current value, so no sale is lost.
+
+  // Apply deltas immediately to Firebase (called when online).
+  // deltas: [{ id: goodId, delta: -3 }, ...]
+  async _applyStockDelta(deltas) {
+    if (!deltas || deltas.length === 0) return;
+    const batch = writeBatch(db);
+    for (const { id, delta } of deltas) {
+      if (!id || delta === 0) continue;
+      batch.update(doc(db, 'goods', String(id)), {
+        stock_quantity: increment(delta),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  // Queue deltas for when the device comes back online (called when offline).
+  // Deltas are stored separately from the main sync queue so they never get
+  // merged with or overwritten by absolute-value good writes.
+  async _queueStockDelta(deltas) {
+    if (!deltas || deltas.length === 0) return;
+    const queue = await localforage.getItem('stock_delta_queue') || [];
+    for (const { id, delta } of deltas) {
+      if (!id || delta === 0) continue;
+      // Fold into an existing queued delta for the same product if present
+      const existing = queue.find(q => String(q.id) === String(id));
+      if (existing) {
+        existing.delta += delta;
+      } else {
+        queue.push({ id: String(id), delta });
+      }
+    }
+    await localforage.setItem('stock_delta_queue', queue);
   }
 
   // ── Debtors change subscription API ─────────────────────────────────────
@@ -261,19 +302,21 @@ class DataService {
             if (change.type === 'removed') {
               localMap.delete(fbId);
             } else {
-              // Firebase is always the authority after a sync event.
-              // 'added': accept Firebase version if local doesn't exist or Firebase is newer.
-              // 'modified': always accept Firebase version (another device synced after us).
+              // For stock_quantity specifically, Firebase is always authoritative
+              // since it's now managed by atomic increment() operations.
+              // For all other fields, Firebase wins on modified or if newer.
               const local = localMap.get(fbId);
               if (!local || change.type === 'modified') {
                 localMap.set(fbId, fbData);
               } else {
-                const fbTime  = new Date(fbData.updatedAt || fbData.createdAt || 0).getTime();
-                const locTime = new Date(local.updatedAt  || local.createdAt  || 0).getTime();
-                // Firebase wins on tie-break or newer timestamp
-                if (fbTime >= locTime) {
-                  localMap.set(fbId, fbData);
-                }
+                // 'added' with existing local — merge keeping Firebase stock_quantity
+                // but preserving any local-only fields not yet synced
+                localMap.set(fbId, {
+                  ...local,
+                  ...fbData,
+                  // Firebase stock_quantity is always correct (atomic increments)
+                  stock_quantity: fbData.stock_quantity ?? local.stock_quantity,
+                });
               }
             }
           });
@@ -893,21 +936,29 @@ class DataService {
     // ── Auto-deduct stock for each item sold ─────────────────────────────
     try {
       const goods = await localforage.getItem(DATA_KEYS.GOODS) || [];
+      const deltas = [];
       let stockChanged = false;
       newSale.items.forEach(soldItem => {
         const good = goods.find(g => String(g.id) === String(soldItem.id));
         if (good && typeof good.stock_quantity === 'number') {
           const qty = soldItem.quantity || soldItem.qty || 0;
-          good.stock_quantity = Math.max(0, good.stock_quantity - qty);
+          const delta = -Math.min(qty, good.stock_quantity); // never go below 0
+          good.stock_quantity = Math.max(0, good.stock_quantity + delta);
+          deltas.push({ id: good.id, delta });
           stockChanged = true;
         }
       });
       if (stockChanged) {
+        // Always update localforage immediately so the UI reflects the sale
         await localforage.setItem(DATA_KEYS.GOODS, goods);
-        // Sync reduced stock to Firebase
+        // Apply delta to Firebase atomically (or queue for when back online)
         if (this.isOnline && auth.currentUser) {
-          await this._batchWrite('goods', goods, g => g.id.toString())
-            .catch(e => console.error('Stock sync error:', e));
+          await this._applyStockDelta(deltas).catch(e =>
+            // If Firebase write fails, queue the delta so it retries on reconnect
+            this._queueStockDelta(deltas)
+          );
+        } else {
+          await this._queueStockDelta(deltas);
         }
       }
     } catch (stockErr) {
@@ -1123,16 +1174,17 @@ class DataService {
     try {
       if (!items || items.length === 0) return;
       const goods = await localforage.getItem(DATA_KEYS.GOODS) || [];
+      const deltas = [];
       let changed = false;
 
       for (const item of items) {
         const qty = parseFloat(item.quantity || item.qty || 0);
         if (qty <= 0) continue;
-        // Match by id first, then by name
         const good = goods.find(g => g.id === item.id) ||
                      goods.find(g => (g.name || '').toLowerCase() === (item.name || '').toLowerCase());
         if (good && typeof good.stock_quantity === 'number') {
           good.stock_quantity += qty;
+          deltas.push({ id: good.id, delta: qty });
           changed = true;
         }
       }
@@ -1140,6 +1192,11 @@ class DataService {
       if (changed) {
         await localforage.setItem(DATA_KEYS.GOODS, goods);
         this._notifyGoodsSubscribers(goods);
+        if (this.isOnline && auth.currentUser) {
+          await this._applyStockDelta(deltas).catch(() => this._queueStockDelta(deltas));
+        } else {
+          await this._queueStockDelta(deltas);
+        }
       }
     } catch (err) {
       console.error('Error restoring stock:', err);
@@ -2063,6 +2120,20 @@ class DataService {
     await localforage.setItem(DATA_KEYS.SYNC_QUEUE, failed);
     if (failed.length === 0) {
       await localforage.setItem(DATA_KEYS.LAST_SYNC, new Date().toISOString());
+    }
+
+    // ── Flush offline stock deltas ────────────────────────────────────────
+    // These were queued while offline — apply them now as atomic increments
+    // so no other device's writes are overwritten.
+    try {
+      const deltaQueue = await localforage.getItem('stock_delta_queue') || [];
+      if (deltaQueue.length > 0) {
+        await this._applyStockDelta(deltaQueue);
+        await localforage.removeItem('stock_delta_queue');
+      }
+    } catch (deltaErr) {
+      console.error('Error flushing stock delta queue:', deltaErr);
+      // Leave queue intact — it will retry on next sync
     }
 
     this.syncInProgress = false;
