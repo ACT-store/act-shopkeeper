@@ -15,6 +15,7 @@ import Settings from './screens/Settings';
 import CashReconciliation from './screens/CashReconciliation';
 import Login from './components/Login';
 import dataService from './services/dataService';
+import { logAction } from './services/activityLogger';
 import { db } from './services/firebaseConfig';
 import { doc, onSnapshot } from 'firebase/firestore';
 import './App.css';
@@ -531,9 +532,11 @@ function App() {
     setCurrentUser(user);
     setUserEmail(user.email);
     fetchUserFullName(user.email);
+    logAction('LOGIN', `Logged in to Shopkeeper`).catch(() => {});
   };
 
   const handleLogout = async () => {
+    await logAction('LOGOUT', `Logged out of Shopkeeper`).catch(() => {});
     sessionStorage.removeItem('pin_verified');
     await dataService.logout();
     setCurrentUser(null);
