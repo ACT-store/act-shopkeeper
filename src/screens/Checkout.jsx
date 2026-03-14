@@ -281,8 +281,9 @@ function Checkout() {
 
   const handleBarcodeDetected = (code) => {
     const now = Date.now();
-    // Debounce — ignore same barcode within 2 seconds
-    if (code === lastScanRef.current.code && now - lastScanRef.current.ts < 2000) return;
+    // Debounce — ignore same barcode within 500ms to prevent a single physical
+    // scan firing twice from the camera, while still allowing intentional rescans.
+    if (code === lastScanRef.current.code && now - lastScanRef.current.ts < 500) return;
     lastScanRef.current = { code, ts: now };
 
     const match = goodsRef.current.find(g =>
