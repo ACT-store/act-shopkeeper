@@ -1,8 +1,7 @@
-/* ============================================================
-   SalesRegister.css
-   All classes are namespaced with .sr- to prevent global
-   CSS collisions with Inventory, Debtors, and SalesJournal.
-   ============================================================ */
+/* =============================================
+==============
+    Checkout.css - ACT Shopkeeper app
+============================================================ */
 
 .sr-container {
   display: flex;
@@ -59,16 +58,15 @@
 }
 
 .sr-catalogue-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 10;
   background-color: #f3f4f6;
-  /* sticky header works because wrapper has overflow-y:auto */
+  /* Header is NOT sticky — it scrolls with the table body so horizontal
+     swipe works as a single unit and columns stay perfectly aligned */
 }
 
 .sr-catalogue-table thead th {
   padding: 0.625rem 0.875rem;
   text-align: left;
+  vertical-align: middle;
   font-weight: 600;
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -97,6 +95,7 @@
   font-size: 0.9375rem;
   white-space: nowrap;
   text-align: left;
+  vertical-align: middle;
 }
 
 .sr-catalogue-empty {
