@@ -345,6 +345,7 @@ function App() {
   const [storeStatusLoading, setStoreStatusLoading] = useState(true);
   const [showClosedModal, setShowClosedModal] = useState(false);
   const [closedModalMessage, setClosedModalMessage] = useState('');
+  const [ownerInfo, setOwnerInfo] = useState({ name: 'the Owner', prefix: 'Mr', phone: '' });
   const storeListenerRef = useRef(null); // Firebase real-time listener for daily_cash
   const shopStatusListenerRef = useRef(null); // Firebase listener for force-logout signal
 
@@ -353,11 +354,11 @@ function App() {
     setStoreStatusLoading(false);
     if (!rec) {
       setStoreIsOpen(false);
-      setClosedModalMessage('The shop has not been opened today. Please open the day in Cash Reconciliation before using the app.');
+      setClosedModalMessage('never_opened');
       setShowClosedModal(true);
     } else if (rec.status === 'closed') {
       setStoreIsOpen(false);
-      setClosedModalMessage('The shop is currently closed. Please re-open the day in Cash Reconciliation to continue.');
+      setClosedModalMessage('closed_today');
       setShowClosedModal(true);
     } else {
       setStoreIsOpen(true);
@@ -469,7 +470,8 @@ function App() {
       if (user) {
         setCurrentUser(user);
         setUserEmail(user.email);
-    fetchUserFullName(user.email);
+        fetchUserFullName(user.email);
+        dataService.getOwnerInfo().then(info => setOwnerInfo(info)).catch(() => {});
       }
       setIsCheckingAuth(false);
     };
@@ -532,6 +534,7 @@ function App() {
     setCurrentUser(user);
     setUserEmail(user.email);
     fetchUserFullName(user.email);
+    dataService.getOwnerInfo().then(info => setOwnerInfo(info)).catch(() => {});
     logAction('LOGIN', `Logged in to Shopkeeper`).catch(() => {});
   };
 
@@ -553,25 +556,15 @@ function App() {
   const handleStoreStatusChange = (isOpen) => {
     setStoreIsOpen(isOpen);
     if (!isOpen) {
-      setClosedModalMessage('The shop is currently closed. Only Cash Reconciliation is accessible. Re-open the day there to continue using the app.');
+      setClosedModalMessage('closed_today');
       setShowClosedModal(true);
     } else {
       setShowClosedModal(false);
     }
   };
 
-  // Closed modal OK → navigate to Cash Reconciliation + scroll to open button
   const handleClosedModalOk = () => {
     setShowClosedModal(false);
-    setCurrentPageIndex(CASH_RECON_INDEX);
-    setTimeout(() => {
-      const btn = document.querySelector('.cr-btn-open, .cr-btn-reopen');
-      if (btn) {
-        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        btn.style.boxShadow = '0 0 0 4px rgba(102, 126, 234, 0.5)';
-        setTimeout(() => { btn.style.boxShadow = ''; }, 2000);
-      }
-    }, 400);
   };
 
   // Page navigation — lock all pages except Cash Reconciliation & Settings when shop is closed
@@ -581,7 +574,7 @@ function App() {
       return;
     }
     if (!storeIsOpen) {
-      setClosedModalMessage('The shop must be open before you can use this page. Please open the day in Cash Reconciliation first.');
+      setClosedModalMessage('closed_today');
       setShowClosedModal(true);
       return;
     }
@@ -670,34 +663,51 @@ function App() {
       </main>
 
       {/* ── Shop Closed Modal ── */}
-      {!storeStatusLoading && showClosedModal && (
-        <div style={{
-          position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999,
-          display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'
-        }}>
+      {!storeStatusLoading && showClosedModal && (() => {
+        const ownerLabel = `${ownerInfo.prefix} ${ownerInfo.name}`;
+        const modalMsg = closedModalMessage === 'never_opened'
+          ? `The shop has not been opened yet. Please contact ${ownerLabel} to OPEN SHOP.`
+          : `The shop has been closed. Please contact ${ownerLabel} to RE-OPEN SHOP.`;
+        const handleContactOwner = () => {
+          if (ownerInfo.phone) {
+            const digits = ownerInfo.phone.replace(/\D/g, '');
+            window.open(`https://wa.me/${digits}`, '_blank');
+          }
+        };
+        return (
           <div style={{
-            background:'var(--surface, #fff)', color:'var(--text-primary, #1a1a1a)',
-            borderRadius:'16px', padding:'28px 24px', maxWidth:'360px', width:'100%',
-            textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.3)'
+            position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'
           }}>
-            <div style={{ fontSize:'48px', marginBottom:'12px' }}>&#x1f512;</div>
-            <h3 style={{ margin:'0 0 12px', fontSize:'18px', fontWeight:700 }}>Shop is Closed</h3>
-            <p style={{ margin:'0 0 20px', fontSize:'14px', lineHeight:'1.6', color:'var(--text-secondary, #666)' }}>
-              {closedModalMessage}
-            </p>
-            <button
-              onClick={handleClosedModalOk}
-              style={{
-                width:'100%', padding:'12px', fontSize:'15px', fontWeight:700,
-                background:'linear-gradient(135deg, #1a4d3a, #0a2d1f)', color:'#fff',
-                border:'none', borderRadius:'10px', cursor:'pointer',
-              }}
-            >
-              OK &mdash; Go to Cash Reconciliation
-            </button>
+            <div style={{
+              background:'var(--surface, #fff)', color:'var(--text-primary, #1a1a1a)',
+              borderRadius:'16px', padding:'28px 24px', maxWidth:'360px', width:'100%',
+              textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.3)'
+            }}>
+              <div style={{ fontSize:'48px', marginBottom:'12px' }}>&#x1f512;</div>
+              <h3 style={{ margin:'0 0 12px', fontSize:'18px', fontWeight:700 }}>Shop is Closed</h3>
+              <p style={{ margin:'0 0 20px', fontSize:'14px', lineHeight:'1.6', color:'var(--text-secondary, #666)' }}>
+                {modalMsg}
+              </p>
+              <button
+                onClick={handleContactOwner}
+                style={{
+                  width:'100%', padding:'12px', fontSize:'15px', fontWeight:700,
+                  background:'linear-gradient(135deg, #25d366, #128c5e)', color:'#fff',
+                  border:'none', borderRadius:'10px', cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.845L.057 23.571a.5.5 0 00.612.612l5.726-1.471A11.943 11.943 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.671-.508-5.203-1.396l-.373-.214-3.867.993.992-3.868-.214-.372A9.944 9.944 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+                </svg>
+                Contact {ownerLabel}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {showHelpModal && (
         <div className="modal-overlay" onClick={() => setShowHelpModal(false)}>
