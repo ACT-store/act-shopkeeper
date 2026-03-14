@@ -3052,6 +3052,23 @@ class DataService {
     } catch { return 'the Owner'; }
   }
 
+  // ── Get owner info (name, gender, phone) for closed-modal contact button ──
+  async getOwnerInfo() {
+    try {
+      const users = await this.getUsers();
+      const owner = (users || []).find(u =>
+        ['shop owner', 'owner'].includes((u.role || '').toLowerCase().trim())
+      );
+      if (!owner) return { name: 'the Owner', prefix: 'Mr', phone: '' };
+      const prefix = (owner.gender || '').toLowerCase() === 'female' ? 'Ms' : 'Mr';
+      return {
+        name: owner.fullName || owner.name || 'the Owner',
+        prefix,
+        phone: owner.phone || '',
+      };
+    } catch { return { name: 'the Owner', prefix: 'Mr', phone: '' }; }
+  }
+
   // ── Write a 'shop_status' doc to Firebase so all connected devices sync ───
   // status: 'open' | 'closed'
   // When status='closed', Shopkeeper devices will force-logout non-owner users.
