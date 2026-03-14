@@ -5,6 +5,7 @@ import { Calculator } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 
 import dataService from '../services/dataService';
+import { logAction } from '../services/activityLogger';
 import { useCurrency } from '../hooks/useCurrency';
 import './Checkout.css';
 import { NativeSettings, AndroidSettings } from 'capacitor-native-settings';
@@ -472,6 +473,8 @@ function Checkout() {
         items, total, paymentType,
         customerName: '', customerPhone: '', photoUrl: null, repaymentDate: '', isDebt: false,
       });
+      const itemSummary = items.map(i => `${i.name} x${i.quantity}`).join(', ');
+      await logAction('SALE', `Cash sale $${total.toFixed(2)} — ${itemSummary}`);
       alert(`Payment confirmed. Total: ${fmt(total)}`);
       setCatalogue([]);
     } catch (error) {
@@ -505,6 +508,8 @@ function Checkout() {
         saleId: newSale.id,
         date: now,
       });
+      const itemSummary = items.map(i => `${i.name} x${i.quantity}`).join(', ');
+      await logAction('SALE', `Internet Banking sale $${total.toFixed(2)} ref:${ref} — ${itemSummary}`);
       alert(`Payment confirmed. Total: ${fmt(total)}`);
       setCatalogue([]);
     } catch (error) {
@@ -538,6 +543,8 @@ function Checkout() {
         saleId: newSale.id,
         date: now,
       });
+      const itemSummary = items.map(i => `${i.name} x${i.quantity}`).join(', ');
+      await logAction('SALE', `MPaisa sale $${total.toFixed(2)} ref:${ref} — ${itemSummary}`);
       alert(`Payment confirmed. Total: ${fmt(total)}`);
       setCatalogue([]);
     } catch (error) {
@@ -605,6 +612,8 @@ function Checkout() {
         customerName, customerPhone, debtorId: selectedDebtorId,
         photoUrl, repaymentDate: finalRepaymentDate, isDebt: true,
       });
+      const itemSummary = items.map(i => `${i.name} x${i.quantity}`).join(', ');
+      await logAction('SALE_CREDIT', `Credit sale $${total.toFixed(2)} to ${customerName} — ${itemSummary}`);
       alert(`Credit sale saved.\nDebtor: ${customerName}\nRepayment Date: ${repaymentDate}`);
       setCatalogue([]);
       closeCreditModal();
