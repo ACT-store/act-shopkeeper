@@ -1,6 +1,5 @@
-/* =============================================
-==============
-    Checkout.css - ACT Shopkeeper app
+/* ============================================================
+   SalesRegister.css - ACT Shopkeeper app
 ============================================================ */
 
 .sr-container {
@@ -49,22 +48,27 @@
 }
 
 /* ── Catalogue table ── */
+/* ── Catalogue table ── */
 .sr-catalogue-table {
+  /* auto layout: every column stretches to fit its longest cell value —
+     header labels and row values always share the same column width */
+  table-layout: auto;
+  /* max-content lets the table grow as wide as it needs; the wrapper clips
+     it and provides the single horizontal scroll for header + body together */
   width: max-content;
   min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  table-layout: auto;
 }
 
 .sr-catalogue-table thead {
   background-color: #f3f4f6;
-  /* Header is NOT sticky — it scrolls with the table body so horizontal
-     swipe works as a single unit and columns stay perfectly aligned */
+  /* NOT sticky — header travels with the body on horizontal swipe so
+     column alignment is always perfect */
 }
 
 .sr-catalogue-table thead th {
-  padding: 0.625rem 0.875rem;
+  padding: 10px 10px;      /* 10 px gap on all sides between text and column edge */
   text-align: left;
   vertical-align: middle;
   font-weight: 600;
@@ -90,7 +94,7 @@
 }
 
 .sr-catalogue-table tbody td {
-  padding: 0.625rem 0.875rem;
+  padding: 10px 10px;      /* 10 px gap matching header */
   color: var(--text-primary);
   font-size: 0.9375rem;
   white-space: nowrap;
@@ -503,7 +507,7 @@
 
   .sr-catalogue-table thead th,
   .sr-catalogue-table tbody td {
-    padding: 0.75rem 1px;
+    padding: 10px 10px;
     font-size: 0.875rem;
   }
 
@@ -548,7 +552,7 @@
 
   .sr-catalogue-table thead th,
   .sr-catalogue-table tbody td {
-    padding: 0.625rem 1px;
+    padding: 10px 10px;
     font-size: 0.8125rem;
   }
 
