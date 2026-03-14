@@ -5,6 +5,7 @@ import {
   checkDailySalesMilestone,
   scheduleDebtReminders,
 } from './notificationService';
+import { flushLogQueue } from './activityLogger';
 import { 
   signInWithEmailAndPassword, 
   signOut, 
@@ -920,13 +921,17 @@ class DataService {
       customerName: sale.customerName || '',
       customer_name: sale.customerName || '',
       customerPhone: sale.customerPhone || '',
-      debtorId: sale.debtorId || null,           // ← ID of the registered debtor
+      debtorId: sale.debtorId || null,
       status: sale.status || 'active',
       photoUrl: sale.photoUrl || null,
       refund: sale.refund || null,
       repaymentDate: sale.repaymentDate || '',
       isDebt: sale.isDebt || false,
       createdAt: nowTz,
+      // ── Staff identity — used by Admin Reports → Sales by Staff ──────────
+      createdBy: localStorage.getItem('user_username') || auth.currentUser?.email || 'Unknown',
+      staffId:   auth.currentUser?.uid || null,
+      // ─────────────────────────────────────────────────────────────────────
       ...(sale.isUnrecorded ? { isUnrecorded: true } : {}),
     };
     
@@ -2135,6 +2140,9 @@ class DataService {
       console.error('Error flushing stock delta queue:', deltaErr);
       // Leave queue intact — it will retry on next sync
     }
+
+    // Flush offline activity logs to Firebase
+    await flushLogQueue().catch(e => console.warn('flushLogQueue error:', e));
 
     this.syncInProgress = false;
     return { success: failed.length === 0, synced, failed: failed.length };
