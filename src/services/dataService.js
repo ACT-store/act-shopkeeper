@@ -3041,6 +3041,34 @@ class DataService {
     return all.find(r => r.business_date === business_date) || null;
   }
 
+  // ── Fetch today's daily_cash doc directly from Firebase ───────────────────
+  async getTodayDailyCash() {
+    try {
+      const today = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      })();
+      if (this.isOnline && auth.currentUser) {
+        const snap = await getDoc(doc(db, 'daily_cash', today));
+        if (snap.exists()) return { id: snap.id, ...snap.data() };
+      }
+      // Offline fallback
+      const all = await localforage.getItem(DATA_KEYS.DAILY_CASH) || [];
+      return all.find(r => r.business_date === today) || null;
+    } catch (err) { console.error('getTodayDailyCash:', err); return null; }
+  }
+
+  // ── Read the app_state/shop_status broadcast doc ──────────────────────────
+  async getShopStatusBroadcast() {
+    try {
+      if (this.isOnline && auth.currentUser) {
+        const snap = await getDoc(doc(db, 'app_state', 'shop_status'));
+        if (snap.exists()) return snap.data();
+      }
+    } catch (err) { console.error('getShopStatusBroadcast:', err); }
+    return null;
+  }
+
   // ── Get the shop owner's full name from users ─────────────────────────────
   async getOwnerName() {
     try {
