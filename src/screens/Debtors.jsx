@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { X, DollarSign, Calendar, Camera, Phone, Mail, MapPin, Edit2, MessageSquare, ArrowUpDown, FileText } from 'lucide-react';
 import dataService from '../services/dataService';
+import { logAction } from '../services/activityLogger';
 import { useCurrency } from '../hooks/useCurrency';
 import actLogo from '../assets/actLogo.js';
 import './Debtors.css';
@@ -787,6 +788,7 @@ A.C.T Shop`;
       }
 
       alert(`Payment of ${fmt(parseFloat(paymentAmount))} recorded`);
+      await logAction('DEBT_REPAYMENT', `${debtorName} repaid $${parseFloat(paymentAmount).toFixed(2)} via ${paymentMethod}`).catch(() => {});
       await loadDebtors();
       const updated = (await dataService.getDebtors()).find(d => d.id === selectedDebtor.id);
       if (updated) {
