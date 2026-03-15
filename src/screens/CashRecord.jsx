@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Edit2, X, Plus, Trash2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import dataService from '../services/dataService';
+import { logAction } from '../services/activityLogger';
 import { useCurrency } from '../hooks/useCurrency';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import PdfTableButton from '../components/PdfTableButton';
@@ -1940,6 +1941,7 @@ function CashRecord() {
       }
 
       closeAddModal();
+      await logAction('CASH_ENTRY_ADDED', `Cash ${newType === TYPE_IN ? 'IN' : 'OUT'} $${amount.toFixed(2)} — ${note}`).catch(() => {});
       await loadEntries();
     } catch (err) {
       console.error('Error saving cash entry:', err);
