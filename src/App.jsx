@@ -547,7 +547,7 @@ function App() {
 
   const handleLogout = async () => {
     await logAction('LOGOUT', `Logged out of Shopkeeper`).catch(() => {});
-    sessionStorage.removeItem('pin_verified');
+    localStorage.removeItem('pin_verified');
     await dataService.logout();
     setCurrentUser(null);
     setUserEmail('');
