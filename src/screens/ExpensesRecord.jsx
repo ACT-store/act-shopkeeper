@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import dataService from '../services/dataService';
+import { logAction } from '../services/activityLogger';
 import { useCurrency } from '../hooks/useCurrency';
 import { formatDate, formatTime, toSortKey } from '../utils/formatDateTime';
 import './ExpensesRecord.css';
@@ -688,6 +689,7 @@ function AddExpenseModal({ onSave, onClose }) {
       const payeeUser = users.find(u => (u.fullName||u.name||'').toLowerCase() === payee.trim().toLowerCase());
       const payeeGender = payeeUser?.gender || '';
       await dataService.addExpense({ date, amount: parseFloat(amount), category, paymentMethod, payee: payee.trim(), note: note.trim(), gender: payeeGender, createdAt: now, updatedAt: now });
+      await logAction('EXPENSE_ADDED', `Expense: ${category} — $${parseFloat(amount).toFixed(2)} paid to ${payee.trim()}`).catch(() => {});
       onSave();
     } catch (e) { console.error(e); showError('ex_date', 'Failed to save. Please try again.'); }
     finally { setSaving(false); }
@@ -845,7 +847,11 @@ function ExpenseDetailModal({ expense, onClose, onSaved, onDeleted }) {
   const handleDelete = async () => {
     if (!window.confirm('Delete this expense? This cannot be undone.')) return;
     setDeleting(true);
-    try { await dataService.deleteExpense(expense.id); onDeleted(); }
+    try {
+      await dataService.deleteExpense(expense.id);
+      await logAction('EXPENSE_DELETED', `Deleted expense: ${expense.category} — $${parseFloat(expense.amount||0).toFixed(2)}`).catch(() => {});
+      onDeleted();
+    }
     catch (e) { alert(e.message); } finally { setDeleting(false); }
   };
 
