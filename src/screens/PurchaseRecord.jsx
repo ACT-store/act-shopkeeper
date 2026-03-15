@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import { X, Plus, Trash2, Edit2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import { logAction } from '../services/activityLogger';
 
 import dataService from '../services/dataService';
 import { useCurrency } from '../hooks/useCurrency';
@@ -202,12 +203,14 @@ function AddPurchaseModal({ onSave, onClose }) {
         supplierName, supplierId: supplierId || null,
         paymentType, creditorId: paymentType === 'credit' ? supplierId : null,
         dueDate: paymentType === 'credit' ? dueDate : null,
-        paymentMethod,  // cash_shop | owner_custody | owner_personal
+        paymentMethod,
         date: new Date(purchaseDate + 'T12:00:00').toISOString(),
         items, total,
         notes: notes.trim(), invoiceRef: invoiceRef.trim(),
         receiptPhoto: receiptPhoto || null,
       });
+      const itemSummary = items.map(i => `${i.qty}x ${i.description}`).join(', ');
+      await logAction('PURCHASE_ADDED', `Purchase from ${supplierName} — $${total.toFixed(2)} (${paymentType}) — ${itemSummary}`).catch(() => {});
       onSave();
     } catch (e) {
       console.error(e);
