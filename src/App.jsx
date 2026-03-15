@@ -604,6 +604,11 @@ function App() {
         responded_at: new Date().toISOString(),
       }, { merge: true });
       setPendingOpenRequest(null);
+      // Optimistically mark shop as open immediately — don't wait for Admin's
+      // approveOpenRequest to propagate back (that round-trip causes the "Shop
+      // is Closed" modal to flash back into view for ~10 seconds after confirm).
+      setStoreIsOpen(true);
+      setShowClosedModal(false);
     } catch (e) {
       alert('Failed to confirm float. Please try again.');
     } finally { setOpenConfirming(false); }
