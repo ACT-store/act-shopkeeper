@@ -861,12 +861,16 @@ function Inventory() {
   const handleUpdateGood = async (id, updates) => {
     await dataService.updateGood(id, updates);
     await loadGoods();
+    const name = updates.name || goods.find(g => g.id === id)?.name || id;
+    await logAction('PRODUCT_UPDATED', `Updated product: ${name}`).catch(() => {});
     setEditingGood(null);
   };
 
   const handleDeleteGood = async (id) => {
+    const name = goods.find(g => g.id === id)?.name || id;
     await dataService.deleteGood(id);
     await loadGoods();
+    await logAction('PRODUCT_DELETED', `Deleted product: ${name}`).catch(() => {});
     setEditingGood(null);
   };
 
