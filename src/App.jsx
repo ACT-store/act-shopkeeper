@@ -367,35 +367,60 @@ function App() {
     }
   }, []);
 
-  // ── Subscribe to today's daily_cash doc in Firebase for real-time sync ────
-  // This ensures that when ANY device closes/re-opens the shop, all other
-  // devices immediately reflect the correct status — no refresh needed.
+  // ── Subscribe to today's daily_cash doc + app_state/shop_status ────────────
+  // Uses BOTH sources so that if the Admin opens the shop on a new calendar day
+  // (creating a new daily_cash doc) the Shopkeeper still immediately sees it as open.
   const startStoreListener = useCallback(() => {
-    if (storeListenerRef.current) return; // already listening
-    const todayKey = (() => {
+    if (storeListenerRef.current) return;
+
+    const getTodayKey = () => {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    })();
-    try {
-      storeListenerRef.current = onSnapshot(
-        doc(db, 'daily_cash', todayKey),
-        (snap) => {
-          if (snap.exists()) {
-            applyShopStatus({ id: snap.id, ...snap.data() });
-          } else {
-            applyShopStatus(null);
-          }
-        },
-        (err) => {
-          console.error('Store status listener error:', err);
-          // On listener error, fall back to a one-time local read
-          checkStoreStatus();
-        }
-      );
-    } catch (err) {
-      console.error('Could not start store listener:', err);
-      checkStoreStatus();
-    }
+    };
+
+    // Track latest values from both sources so we can combine them
+    let latestDailyCash = undefined; // undefined = not yet received
+    let latestBroadcast = undefined;
+
+    const resolve = () => {
+      // Wait until both sources have reported at least once
+      if (latestDailyCash === undefined || latestBroadcast === undefined) return;
+      // If broadcast says open, the shop is open — don't let a missing/stale
+      // daily_cash doc override that
+      if (latestBroadcast?.status === 'open') {
+        setStoreIsOpen(true);
+        setStoreStatusLoading(false);
+        setShowClosedModal(false);
+        return;
+      }
+      // Otherwise defer to the daily_cash record
+      applyShopStatus(latestDailyCash);
+    };
+
+    // Listener 1: today's daily_cash doc (re-evaluates date on every snapshot
+    // so midnight rollovers are handled correctly)
+    const unsub1 = onSnapshot(
+      doc(db, 'daily_cash', getTodayKey()),
+      (snap) => {
+        latestDailyCash = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+        resolve();
+      },
+      (err) => { console.error('daily_cash listener error:', err); checkStoreStatus(); }
+    );
+
+    // Listener 2: broadcast doc (written by Admin on every open/close action)
+    const unsub2 = onSnapshot(
+      doc(db, 'app_state', 'shop_status'),
+      (snap) => {
+        latestBroadcast = snap.exists() ? snap.data() : null;
+        resolve();
+      },
+      (err) => { console.error('shop_status listener error:', err); }
+    );
+
+    // Store a combined unsubscribe in the ref
+    storeListenerRef.current = () => { unsub1(); unsub2(); };
+
   }, [applyShopStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopStoreListener = useCallback(() => {
@@ -457,12 +482,22 @@ function App() {
   // ── One-time async check (offline fallback / first load) ─────────────────
   const checkStoreStatus = useCallback(async () => {
     try {
-      const todayStr = (() => {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      })();
-      const allRecs = await dataService.getDailyCashRecords();
-      const todayRec = (allRecs || []).find(r => r.business_date === todayStr);
+      // Fetch both sources in parallel
+      const [todayRec, broadcast] = await Promise.all([
+        dataService.getTodayDailyCash(),
+        dataService.getShopStatusBroadcast(),
+      ]);
+
+      // If the broadcast says 'open', trust it — daily_cash doc for today may
+      // not exist yet (e.g. admin opened on a new calendar day) but shop is open.
+      if (broadcast?.status === 'open') {
+        setStoreIsOpen(true);
+        setStoreStatusLoading(false);
+        setShowClosedModal(false);
+        return;
+      }
+
+      // Otherwise defer to today's daily_cash record
       applyShopStatus(todayRec || null);
     } catch (e) {
       console.error('Error checking store status:', e);
@@ -760,3 +795,4 @@ function App() {
 }
 
 export default App;
+
