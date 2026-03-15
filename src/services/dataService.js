@@ -3542,7 +3542,7 @@ class DataService {
   async getUsers() {
     try {
       if (this.isOnline && auth.currentUser) {
-        const snap = await getDocs(collection(db, 'users'));
+        const snap = await getDocs(collection(db, 'staff_users'));
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         await localforage.setItem('act_users', users);
         return users;
