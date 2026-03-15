@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import dataService from '../services/dataService';
 import { logAction } from '../services/activityLogger';
-import { auth } from '../services/firebaseConfig';
+import { auth, db } from '../services/firebaseConfig';
+import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { formatTime } from '../utils/formatDateTime';
 import './CashReconciliation.css';
 
@@ -254,8 +255,14 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
   const [showClosedTabModal, setShowClosedTabModal] = useState(false);
 
   // ── Close shop confirmation modal ─────────────────────────────────────────
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [ownerName, setOwnerName]               = useState('the Owner');
+  const [showCloseConfirm, setShowCloseConfirm]   = useState(false);
+  const [ownerName, setOwnerName]                 = useState('the Owner');
+  const [ownerInfo, setOwnerInfo]                 = useState({ name: 'the Owner', prefix: 'Mr' });
+  // Close-request handshake states
+  const [closeRequestSent, setCloseRequestSent]   = useState(false);  // waiting for owner
+  const [closeRejected, setCloseRejected]         = useState(false);  // owner said No
+  const [shopkeeperFullName, setShopkeeperFullName] = useState('');
+  const closeListenerRef = React.useRef(null);
 
   const reopenBtnRef = React.useRef(null);
 
@@ -284,9 +291,18 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
       setRecords((allRecs || []).sort((a, b) => b.business_date.localeCompare(a.business_date)));
       const summary = await dataService.calculateExpectedCash(today);
       setLiveSummary(summary);
-      // Fetch owner name for close-shop confirmation
+      // Fetch owner info for close-shop confirmation
       const oName = await dataService.getOwnerName();
       setOwnerName(oName);
+      const info = await dataService.getOwnerInfo();
+      setOwnerInfo(info);
+      // Fetch the logged-in shopkeeper's full name
+      const users = await dataService.getUsers();
+      const me = users.find(u =>
+        u.authUid === auth.currentUser?.uid ||
+        u.username === (auth.currentUser?.email || '').split('@')[0]
+      );
+      setShopkeeperFullName(me?.fullName || dataService.userName());
     } catch (e) {
       console.error('CashReconciliation loadData error:', e);
     } finally {
@@ -305,6 +321,11 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
     });
     return () => unsub();
   }, [loadData]);
+
+  // Cleanup close-request listener on unmount
+  useEffect(() => {
+    return () => { if (closeListenerRef.current) { closeListenerRef.current(); closeListenerRef.current = null; } };
+  }, []);
 
   // ── Open Day ─────────────────────────────────────────────────────────────
 
@@ -339,18 +360,82 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
         : 'Notes are required when cash is SURPLUS. Please explain why.');
       return;
     }
-    setCloseSaving(true);
+
+    // ── Write a pending close request to Firebase ─────────────────────────
+    // The Admin app will pick this up and show a confirmation modal to the owner.
+    const requestDoc = {
+      status:          'pending',
+      shopkeeper_uid:  auth.currentUser?.uid || '',
+      shopkeeper_name: shopkeeperFullName || dataService.userName(),
+      counted_cash:    counted,
+      expected_cash:   summary.expected || 0,
+      difference:      diff,
+      notes:           closeNotes.trim(),
+      requested_at:    new Date().toISOString(),
+      responded_at:    null,
+      responded_by:    null,
+    };
+
     try {
-      await dataService.closeDay({ counted_cash: counted, notes: closeNotes.trim() });
-      const diffStr = diff === 0 ? 'Balanced' : diff < 0 ? `Short by $${Math.abs(diff).toFixed(2)}` : `Surplus of $${diff.toFixed(2)}`;
-      await logAction('DAY_CLOSE', `Closed day — counted $${counted.toFixed(2)}, expected $${(summary.expected||0).toFixed(2)} — ${diffStr}`).catch(() => {});
-      setCountedCash('');
-      setCloseNotes('');
-      if (onStoreStatusChange) onStoreStatusChange(false);
-      await loadData();
+      await setDoc(doc(db, 'close_requests', today), {
+        ...requestDoc,
+        serverTimestamp: serverTimestamp(),
+      });
     } catch (e) {
-      alert('Failed to close day: ' + e.message);
-    } finally { setCloseSaving(false); }
+      alert('Failed to send close request. Please try again.');
+      return;
+    }
+
+    setCloseRequestSent(true);
+    setCloseRejected(false);
+
+    // ── Listen for owner's response ───────────────────────────────────────
+    if (closeListenerRef.current) { closeListenerRef.current(); closeListenerRef.current = null; }
+    closeListenerRef.current = onSnapshot(
+      doc(db, 'close_requests', today),
+      async (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.status === 'approved') {
+          // Owner approved — actually close the day now
+          closeListenerRef.current?.();
+          closeListenerRef.current = null;
+          setCloseSaving(true);
+          try {
+            await dataService.closeDay({ counted_cash: counted, notes: closeNotes.trim() });
+            const diffStr = diff === 0 ? 'Balanced' : diff < 0 ? `Short by $${Math.abs(diff).toFixed(2)}` : `Surplus of $${diff.toFixed(2)}`;
+            await logAction('DAY_CLOSE', `Closed day — counted $${counted.toFixed(2)}, expected $${(summary.expected||0).toFixed(2)} — ${diffStr}`).catch(() => {});
+            setCountedCash('');
+            setCloseNotes('');
+            if (onStoreStatusChange) onStoreStatusChange(false);
+            // Show "Shop is Closed" state briefly then log out after 3 seconds
+            setCloseRequestSent(false);
+            setTimeout(async () => {
+              await dataService.logout();
+              window.location.reload();
+            }, 3000);
+          } catch (e) {
+            alert('Failed to close day: ' + e.message);
+          } finally { setCloseSaving(false); }
+        } else if (data.status === 'rejected') {
+          // Owner rejected — show rejection message
+          closeListenerRef.current?.();
+          closeListenerRef.current = null;
+          setCloseRejected(true);
+        }
+      },
+      (err) => { console.error('close_requests listener error:', err); }
+    );
+
+    // ── Offline fallback: if shopkeeper goes offline, close and log out anyway ──
+    const handleOffline = async () => {
+      window.removeEventListener('offline', handleOffline);
+      if (closeListenerRef.current) { closeListenerRef.current(); closeListenerRef.current = null; }
+      await dataService.closeDay({ counted_cash: counted, notes: closeNotes.trim() }).catch(() => {});
+      await dataService.logout();
+      window.location.reload();
+    };
+    window.addEventListener('offline', handleOffline);
   };
 
   const handleCloseDay = async () => {
@@ -796,6 +881,66 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
                 {closeSaving ? 'Closing…' : '🔒 Yes, Close Shop'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Waiting for owner confirmation modal ── */}
+      {closeRequestSent && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:10000,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'
+        }}>
+          <div style={{
+            background:'var(--surface, #fff)', color:'var(--text-primary, #1a1a1a)',
+            borderRadius:'18px', padding:'32px 24px', maxWidth:'370px', width:'100%',
+            textAlign:'center', boxShadow:'0 24px 64px rgba(0,0,0,0.4)'
+          }}>
+            {!closeRejected ? (
+              <>
+                <div style={{ fontSize:'52px', marginBottom:'14px' }}>⏳</div>
+                <h3 style={{ margin:'0 0 12px', fontSize:'18px', fontWeight:800 }}>
+                  Awaiting Confirmation
+                </h3>
+                <p style={{ margin:'0 0 20px', fontSize:'14px', lineHeight:'1.7', color:'var(--text-secondary,#555)' }}>
+                  Wait for <strong>{ownerInfo.prefix} {ownerInfo.name}</strong> to confirm receiving the cash before the shop is closed.
+                </p>
+                <button
+                  disabled
+                  style={{
+                    width:'100%', padding:'13px', fontSize:'15px', fontWeight:700,
+                    background:'#9ca3af', color:'#fff', border:'none',
+                    borderRadius:'10px', cursor:'not-allowed', opacity:0.7,
+                  }}
+                >
+                  🔒 Close Shop
+                </button>
+                <p style={{ marginTop:'14px', fontSize:'12px', color:'#9ca3af' }}>
+                  This button will unlock once {ownerInfo.prefix} {ownerInfo.name} confirms.
+                </p>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize:'52px', marginBottom:'14px' }}>❌</div>
+                <h3 style={{ margin:'0 0 12px', fontSize:'18px', fontWeight:800, color:'#dc2626' }}>
+                  Shop Closing Not Approved
+                </h3>
+                <p style={{ margin:'0 0 20px', fontSize:'14px', lineHeight:'1.7', color:'var(--text-secondary,#555)' }}>
+                  The closing of the shop was not approved. Please see or contact{' '}
+                  <strong>{ownerInfo.prefix} {ownerInfo.name}</strong>.
+                </p>
+                <button
+                  onClick={() => { setCloseRejected(false); setCloseRequestSent(false); }}
+                  style={{
+                    width:'100%', padding:'13px', fontSize:'15px', fontWeight:700,
+                    background:'linear-gradient(135deg, #1a4d3a, #0a2d1f)', color:'#fff',
+                    border:'none', borderRadius:'10px', cursor:'pointer',
+                  }}
+                >
+                  OK
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
