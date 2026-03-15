@@ -407,12 +407,19 @@ function App() {
 
   // ── Listen for shop_status force-logout signal ────────────────────────────
   // When the shop is closed (by any device), non-owner users are logged out.
+  // IMPORTANT: skip the first snapshot — it just reflects the current state at
+  // attach time. We only want to force-logout when the status actively CHANGES
+  // to 'closed' mid-session (e.g. owner closes the shop while staff are logged in).
+  // The closed-modal on initial load is handled separately by applyShopStatus.
   const startShopStatusListener = useCallback((user) => {
     if (shopStatusListenerRef.current) return;
+    let isFirstSnapshot = true;
     try {
       shopStatusListenerRef.current = onSnapshot(
         doc(db, 'app_state', 'shop_status'),
         async (snap) => {
+          // Skip the initial snapshot — only react to live changes
+          if (isFirstSnapshot) { isFirstSnapshot = false; return; }
           if (!snap.exists()) return;
           const data = snap.data();
           if (data.status === 'closed') {
