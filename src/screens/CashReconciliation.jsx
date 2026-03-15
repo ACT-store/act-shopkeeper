@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useValidation, ValidationNote, errorBorder } from '../utils/validation.jsx';
 import dataService from '../services/dataService';
+import { logAction } from '../services/activityLogger';
 import { auth } from '../services/firebaseConfig';
 import { formatTime } from '../utils/formatDateTime';
 import './CashReconciliation.css';
@@ -173,6 +174,7 @@ function DetailModal({ record, onClose, onReopen, onStoreStatusChange }) {
     setReopening(true);
     try {
       await dataService.reopenDay(record.business_date);
+      await logAction('DAY_REOPEN', `Re-opened day ${record.business_date}`).catch(() => {});
       if (onStoreStatusChange) onStoreStatusChange(true);
       onReopen();
       onClose();
@@ -312,6 +314,7 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
     setOpeningSaving(true);
     try {
       await dataService.openDay({ opening_float: float });
+      await logAction('DAY_OPEN', `Opened day with float $${float.toFixed(2)}`).catch(() => {});
       setOpeningFloat('');
       if (onStoreStatusChange) onStoreStatusChange(true);
       await loadData();
@@ -339,6 +342,8 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
     setCloseSaving(true);
     try {
       await dataService.closeDay({ counted_cash: counted, notes: closeNotes.trim() });
+      const diffStr = diff === 0 ? 'Balanced' : diff < 0 ? `Short by $${Math.abs(diff).toFixed(2)}` : `Surplus of $${diff.toFixed(2)}`;
+      await logAction('DAY_CLOSE', `Closed day — counted $${counted.toFixed(2)}, expected $${(summary.expected||0).toFixed(2)} — ${diffStr}`).catch(() => {});
       setCountedCash('');
       setCloseNotes('');
       if (onStoreStatusChange) onStoreStatusChange(false);
