@@ -17,7 +17,7 @@ import Login from './components/Login';
 import dataService from './services/dataService';
 import { logAction } from './services/activityLogger';
 import { db } from './services/firebaseConfig';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import './App.css';
 
 // ── Error Boundary — catches render crashes and shows a readable message ──────
@@ -346,8 +346,12 @@ function App() {
   const [showClosedModal, setShowClosedModal] = useState(false);
   const [closedModalMessage, setClosedModalMessage] = useState('');
   const [ownerInfo, setOwnerInfo] = useState({ name: 'the Owner', prefix: 'Mr', phone: '' });
-  const storeListenerRef = useRef(null); // Firebase real-time listener for daily_cash
-  const shopStatusListenerRef = useRef(null); // Firebase listener for force-logout signal
+  const storeListenerRef = useRef(null);
+  const shopStatusListenerRef = useRef(null);
+  // ── Open request handshake ───────────────────────────────────────────────
+  const [pendingOpenRequest, setPendingOpenRequest] = useState(null); // { float, opened_by, owner_prefix }
+  const [openConfirming, setOpenConfirming] = useState(false);
+  const openRequestListenerRef = useRef(null);
 
   // ── Apply shop status from a daily_cash record (or absence of one) ────────
   const applyShopStatus = useCallback((rec) => {
@@ -522,17 +526,35 @@ function App() {
 
   useEffect(() => {
     if (currentUser) {
-      // Immediate local check for fast feedback
       checkStoreStatus();
-      // Real-time Firebase listener keeps status in sync across all devices
       startStoreListener();
-      // Listen for force-logout signal when shop is closed
       startShopStatusListener(currentUser);
+      // ── Listen for open requests from Admin ───────────────────────────────
+      const todayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+      if (openRequestListenerRef.current) { openRequestListenerRef.current(); openRequestListenerRef.current = null; }
+      openRequestListenerRef.current = onSnapshot(
+        doc(db, 'open_requests', todayKey),
+        (snap) => {
+          if (!snap.exists()) { setPendingOpenRequest(null); return; }
+          const data = snap.data();
+          if (data.status === 'pending') {
+            setPendingOpenRequest(data);
+          } else {
+            setPendingOpenRequest(null);
+          }
+        },
+        (err) => { console.error('open_requests listener (shopkeeper):', err); }
+      );
     } else {
       stopStoreListener();
       stopShopStatusListener();
+      if (openRequestListenerRef.current) { openRequestListenerRef.current(); openRequestListenerRef.current = null; }
     }
-    return () => { stopStoreListener(); stopShopStatusListener(); };
+    return () => {
+      stopStoreListener();
+      stopShopStatusListener();
+      if (openRequestListenerRef.current) { openRequestListenerRef.current(); openRequestListenerRef.current = null; }
+    };
   }, [currentUser, checkStoreStatus, startStoreListener, stopStoreListener, startShopStatusListener, stopShopStatusListener]);
 
   useEffect(() => {
@@ -570,6 +592,21 @@ function App() {
       if (match && match.fullName) setUserName(match.fullName);
       else setUserName(email.split('@')[0]);
     } catch { setUserName(email.split('@')[0]); }
+  };
+
+  const handleConfirmFloat = async () => {
+    if (!pendingOpenRequest) return;
+    setOpenConfirming(true);
+    const todayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+    try {
+      await setDoc(doc(db, 'open_requests', todayKey), {
+        status:       'approved',
+        responded_at: new Date().toISOString(),
+      }, { merge: true });
+      setPendingOpenRequest(null);
+    } catch (e) {
+      alert('Failed to confirm float. Please try again.');
+    } finally { setOpenConfirming(false); }
   };
 
   const handleLoginSuccess = (user) => {
@@ -790,9 +827,47 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* ── Float Confirmation Modal (from Admin open request) ── */}
+      {pendingOpenRequest && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:99999,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'
+        }}>
+          <div style={{
+            background:'var(--surface,#fff)', color:'var(--text-primary,#1a1a1a)',
+            borderRadius:'20px', padding:'32px 24px', maxWidth:'360px', width:'100%',
+            textAlign:'center', boxShadow:'0 28px 70px rgba(0,0,0,0.4)'
+          }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>💵</div>
+            <h3 style={{ margin:'0 0 14px', fontSize:'18px', fontWeight:800 }}>
+              Float Received?
+            </h3>
+            <p style={{ margin:'0 0 20px', fontSize:'14px', lineHeight:'1.75', color:'var(--text-secondary,#555)' }}>
+              Please confirm that the float from{' '}
+              <strong>{pendingOpenRequest.owner_prefix || 'Mr'} {pendingOpenRequest.opened_by || ownerInfo.name}</strong>{' '}
+              of{' '}
+              <span style={{ fontWeight:800, fontSize:'17px', color:'#059669' }}>
+                ${parseFloat(pendingOpenRequest.float || 0).toFixed(2)}
+              </span>{' '}
+              has been placed in the shop drawer.
+            </p>
+            <button
+              onClick={handleConfirmFloat}
+              disabled={openConfirming}
+              style={{
+                width:'100%', padding:'14px', fontSize:'15px', fontWeight:700,
+                background:'linear-gradient(135deg, #16a34a, #15803d)', color:'#fff',
+                border:'none', borderRadius:'12px', cursor:'pointer',
+              }}
+            >
+              {openConfirming ? 'Confirming…' : '✅ Yes, Float Received'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default App;
-
