@@ -83,9 +83,9 @@ function SessionBlock({ label, openedBy, openedAt, float, expected, counted, not
         <span className="cr-summary-value">{closedAt ? formatTime(closedAt) : '—'}</span>
       </div>
       {isLastSession && isDayClosed && (
-        <button className="cr-btn-reopen" onClick={onReopen} disabled={reopening}>
-          {reopening ? 'Reopening…' : '🔓 Re-Open Shop'}
-        </button>
+        <div style={{ marginTop:'14px', padding:'12px 14px', background:'var(--surface-alt,#f3f4f6)', borderRadius:'10px', textAlign:'center', fontSize:'13px', color:'var(--text-secondary,#6b7280)', lineHeight:'1.6' }}>
+          🔒 Only the shop owner can re-open the shop. Please ask them to re-open from the <strong>ACT Admin app</strong>.
+        </div>
       )}
     </div>
   );
@@ -462,7 +462,7 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
       return (
         <div className="cr-status-banner none">
           <span className="cr-status-dot" />
-          Day not started — tap Open Day to begin
+          Day not started — waiting for owner to open shop
         </div>
       );
     }
@@ -490,30 +490,13 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
       return (
         <>
           {renderStatusBanner()}
-          <div className="cr-card">
-            <p className="cr-card-title">Open Day</p>
-            <div className="cr-field">
-              <label className="cr-label">Opening Float ($)</label>
-              <input
-                type="number"
-                className="cr-input"
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                value={openingFloat}
-                data-field="cr_float"
-                style={errorBorder('cr_float', fieldErrors)}
-                onChange={e => { setOpeningFloat(e.target.value); clearFieldError('cr_float'); }}
-              />
-              <ValidationNote field="cr_float" errors={fieldErrors} />
-            </div>
-            <button
-              className="cr-btn cr-btn-open"
-              onClick={handleOpenDay}
-              disabled={openingSaving || openingFloat === ''}
-            >
-              {openingSaving ? 'Opening…' : '✅ Open Day'}
-            </button>
+          <div className="cr-card" style={{ textAlign:'center', padding:'28px 20px' }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>🔒</div>
+            <p className="cr-card-title" style={{ marginBottom:'8px' }}>Shop Not Opened Yet</p>
+            <p style={{ fontSize:'14px', lineHeight:'1.7', color:'var(--text-secondary,#555)', margin:0 }}>
+              Only <strong>{ownerInfo.prefix} {ownerInfo.name}</strong> can open the shop.
+              Please ask them to open the shop from the <strong>ACT Admin app</strong>.
+            </p>
           </div>
         </>
       );
@@ -591,31 +574,10 @@ function CashReconciliation({ onStoreStatusChange, storeIsOpen }) {
           <div className="cr-closed-msg">
             <span className="cr-closed-icon">🔒</span>
             <span className="cr-closed-title">Day Closed</span>
-            <span className="cr-closed-sub">Enter your Opening Float, then tap Re-Open Shop to start a new session.</span>
+            <span className="cr-closed-sub">
+              Only <strong>{ownerInfo.prefix} {ownerInfo.name}</strong> can re-open the shop. Please ask them to re-open from the <strong>ACT Admin app</strong>.
+            </span>
           </div>
-
-          <div className="cr-card" style={{ marginBottom: 0 }}>
-            <div className="cr-field">
-              <label className="cr-label">Opening Float for New Session ($)</label>
-              <input
-                type="number"
-                className="cr-input"
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                value={reopenFloat}
-                data-field="cr_reopen"
-                style={errorBorder('cr_reopen', fieldErrors)}
-                onChange={e => { setReopenFloat(e.target.value); clearFieldError('cr_reopen'); }}
-              />
-              <ValidationNote field="cr_reopen" errors={fieldErrors} />
-            </div>
-          </div>
-
-          <button className="cr-btn cr-btn-reopen" ref={reopenBtnRef} onClick={handleReopenToday}
-            disabled={reopenFloat === ''}>
-            🔓 Re-Open Shop
-          </button>
         </>
       );
     }
