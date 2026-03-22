@@ -43,6 +43,14 @@ const PAYMENT_METHODS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'mpaisa',        label: 'MPAiSA' },
   { value: 'check',         label: 'Cheque' },
+  { value: 'on_credit',     label: 'On Credit' },
+];
+
+// Payment methods allowed when category is Owner Drawings
+const OWNER_DRAWINGS_PAYMENT_METHODS = [
+  { value: 'cash',      label: 'Cash' },
+  { value: 'check',     label: 'Cheque' },
+  { value: 'on_credit', label: 'On Credit' },
 ];
 
 function methodBadgeClass(m) {
@@ -51,10 +59,12 @@ function methodBadgeClass(m) {
   if (m === 'mpaisa')        return 'er-method-badge er-method-mobile';
   if (m === 'mobile_money')  return 'er-method-badge er-method-mobile'; // legacy
   if (m === 'check')         return 'er-method-badge er-method-check';
+  if (m === 'on_credit')     return 'er-method-badge er-method-other';
   return 'er-method-badge er-method-other';
 }
 function methodLabel(m) {
   if (m === 'mobile_money') return 'MPAiSA';
+  if (m === 'on_credit')    return 'On Credit';
   return PAYMENT_METHODS.find(p => p.value === m)?.label || m || 'Cash';
 }
 
@@ -300,8 +310,100 @@ function NewSupplierModal({ onSave, onClose, suppliersList = [] }) {
   );
 }
 
+// ── Simple Add New Supplier Modal (used from Buy Operational Assets) ───────────
+function SimpleAddSupplierModal({ onSave, onClose }) {
+  const { fieldErrors, showError, clearFieldError } = useValidation();
+  const [fullName, setFullName]   = useState('');
+  const [phone, setPhone]         = useState('');
+  const [whatsapp, setWhatsapp]   = useState('');
+  const [email, setEmail]         = useState('');
+  const [address, setAddress]     = useState('');
+  const [saving, setSaving]       = useState(false);
+
+  const ls = { display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' };
+  const fs = { width:'100%', padding:'10px 12px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' };
+
+  const handleSave = async (e) => {
+    e && e.preventDefault();
+    if (!fullName.trim())  return showError('sas_name',    'Full Name is required');
+    if (!phone.trim())     return showError('sas_phone',   'Phone is required');
+    if (!whatsapp.trim() && !email.trim()) return showError('sas_whatsapp', 'Provide at least WhatsApp or Email');
+    if (email.trim() && !email.includes('@')) return showError('sas_email', 'Email must contain @');
+    if (!address.trim())   return showError('sas_address', 'Address is required');
+    setSaving(true);
+    try {
+      const supplierData = {
+        id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+        customerName: fullName.trim(), name: fullName.trim(),
+        phone: phone.trim(), customerPhone: phone.trim(), gender: '',
+        whatsapp: whatsapp.trim(), email: email.trim(), address: address.trim(),
+        totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastSale: null,
+      };
+      const current = await dataService.getSuppliers() || [];
+      current.push(supplierData);
+      await dataService.setSuppliers(current);
+      onSave(supplierData);
+    } catch (err) { console.error(err); showError('sas_name', 'Failed to save. Please try again.'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:5500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ background:'var(--surface, white)', color:'var(--text-primary, #111)', borderRadius:'14px', width:'100%', maxWidth:'420px', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 12px 48px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>Add New Supplier</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary, #6b7280)', padding:'4px' }}><X size={20}/></button>
+        </div>
+        <div style={{ overflowY:'auto', padding:'20px', flex:1, display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div>
+            <label style={ls}>Full Name *</label>
+            <input data-field="sas_name" style={{ ...fs, ...errorBorder('sas_name', fieldErrors) }}
+              value={fullName} placeholder="Enter full name"
+              onChange={e => { setFullName(e.target.value); clearFieldError('sas_name'); }} />
+            <ValidationNote field="sas_name" errors={fieldErrors} />
+          </div>
+          <div>
+            <label style={ls}>Phone *</label>
+            <input data-field="sas_phone" style={{ ...fs, ...errorBorder('sas_phone', fieldErrors) }}
+              value={phone} placeholder="Phone number"
+              onChange={e => { setPhone(e.target.value); clearFieldError('sas_phone'); }} />
+            <ValidationNote field="sas_phone" errors={fieldErrors} />
+          </div>
+          <div>
+            <label style={ls}>WhatsApp</label>
+            <input data-field="sas_whatsapp" style={{ ...fs, ...errorBorder('sas_whatsapp', fieldErrors) }}
+              value={whatsapp} placeholder="WhatsApp number (optional)"
+              onChange={e => { setWhatsapp(e.target.value); clearFieldError('sas_whatsapp'); }} />
+            <ValidationNote field="sas_whatsapp" errors={fieldErrors} />
+          </div>
+          <div>
+            <label style={ls}>Email</label>
+            <input data-field="sas_email" style={{ ...fs, ...errorBorder('sas_email', fieldErrors) }}
+              value={email} placeholder="email@example.com"
+              onChange={e => { setEmail(e.target.value); clearFieldError('sas_email'); }} />
+            <ValidationNote field="sas_email" errors={fieldErrors} />
+          </div>
+          <div>
+            <label style={ls}>Address *</label>
+            <textarea data-field="sas_address" rows={2} style={{ ...fs, ...errorBorder('sas_address', fieldErrors), resize:'vertical' }}
+              value={address} placeholder="Enter address"
+              onChange={e => { setAddress(e.target.value); clearFieldError('sas_address'); }} />
+            <ValidationNote field="sas_address" errors={fieldErrors} />
+          </div>
+          <p style={{ fontSize:'12px', color:'#9ca3af', margin:0 }}>* Required · At least WhatsApp or Email required</p>
+        </div>
+        <div style={{ display:'flex', gap:'10px', padding:'16px 20px', borderTop:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'1.5px solid var(--border, #e5e7eb)', background:'var(--surface, white)', color:'var(--text-primary, #111)', cursor:'pointer', fontWeight:600, fontSize:'14px' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:saving?'#9ca3af':'#667eea', color:'white', cursor:saving?'not-allowed':'pointer', fontWeight:700, fontSize:'14px' }}>{saving?'Saving…':'Save'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Add Operational Assets Modal (migrated from CashRecord) ────────────────────
-function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, suppliersList, onSave, onClose, onNewSupplier }) {
+function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, suppliersList: initialSuppliersList, onSave, onClose, onNewSupplier }) {
   const { fmt } = useCurrency();
   const { fieldErrors, showError, clearFieldError } = useValidation();
   const [supplierSearch, setSupplierSearch] = useState(initialSupplierName || '');
@@ -315,6 +417,7 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
   const nextId = useRef(2);
   const [items, setItems] = useState([{ id:1, name:'', qty:'', costPrice:'' }]);
   const [cashBalance, setCashBalance] = useState(null);
+  const [suppliersList, setSuppliersList] = useState(initialSuppliersList || []);
 
   useEffect(() => {
     dataService.getCashEntries().then(entries => {
@@ -386,22 +489,9 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
                   </div>
                 )}
               </div>
-              {onNewSupplier && (
-                <button onClick={onNewSupplier} style={{ padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600, border:'2px solid #667eea', background:'#eef2ff', color:'#667eea', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ New Supplier</button>
-              )}
+              {onNewSupplier && (<button onClick={onNewSupplier} style={{ padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600, border:'2px solid #667eea', background:'#eef2ff', color:'#667eea', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ New Supplier</button>)}
             </div>
             <ValidationNote field="oa_supplier" errors={fieldErrors} />
-          </div>
-          <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Payment Type</label>
-            <div style={{ display:'flex', gap:'8px' }}>
-              {[['cash','💵 Cash'],['credit','📋 Credit']].map(([pt,lbl]) => (
-                <button key={pt} onClick={() => setPaymentType(pt)} style={{ flex:1, padding:'9px', borderRadius:'8px', border:'2px solid', borderColor:paymentType===pt?(pt==='cash'?'#16a34a':'#4f46e5'):'var(--border, #d1d5db)', background:paymentType===pt?(pt==='cash'?'#f0fdf4':'#eef2ff'):'var(--surface, white)', fontWeight:paymentType===pt?700:400, cursor:'pointer', fontSize:'13px', color:'var(--text-primary, #111)' }}>{lbl}</button>
-              ))}
-            </div>
-            <p style={{ fontSize:'11px', marginTop:'4px', color:paymentType==='credit'?'#4f46e5':'#6b7280' }}>
-              {paymentType==='cash'?'Cash paid now — a Cash OUT entry will be recorded.':'Items received, pay later — no immediate cash deducted.'}
-            </p>
           </div>
           <div>
             <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Invoice / Ref *</label>
@@ -618,7 +708,7 @@ function AddExpenseModal({ onSave, onClose }) {
   const [date, setDate]                       = useState(todayStr());
   const [category, setCategory]               = useState('');
   const [amount, setAmount]                   = useState('');
-  const paymentMethod = 'cash'; // always cash
+  const [paymentMethod, setPaymentMethod]     = useState('cash');
   const [payee, setPayee]                     = useState('');
   const [note, setNote]                       = useState('');
   const [saving, setSaving]                   = useState(false);
@@ -629,9 +719,9 @@ function AddExpenseModal({ onSave, onClose }) {
   const seq_payee  = seq_amount && parseFloat(amount) > 0;         // Paid To unlocks after Amount
   const seq_note   = seq_payee && !!payee.trim();                  // Note unlocks after Paid To
 
-  const [showCatModal, setShowCatModal]       = useState(false);
-  const [showAssetsModal, setShowAssetsModal] = useState(false);
-  const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
+  const [showCatModal, setShowCatModal]                   = useState(false);
+  const [showAssetsModal, setShowAssetsModal]             = useState(false);
+  const [showSimpleSupplierModal, setShowSimpleSupplierModal] = useState(false);
   const [suppliersList, setSuppliersList]     = useState([]);
   const [assetsResult, setAssetsResult]       = useState(null);
   const [users, setUsers]                     = useState([]);
@@ -649,7 +739,7 @@ function AddExpenseModal({ onSave, onClose }) {
     });
   }, []);
 
-  useEffect(() => { setPayee(''); }, [category]);
+  useEffect(() => { setPayee(''); setPaymentMethod('cash'); }, [category]);
 
   const isSupplierPurchase = category === 'Supplier Purchase';
 
@@ -676,8 +766,8 @@ function AddExpenseModal({ onSave, onClose }) {
     }
 
     if (!amount || parseFloat(amount) <= 0) return showError('ex_amount', 'Enter a valid amount');
-    // Cash cap: expense amount must not exceed current cash balance
-    if (cashBalance !== null && parseFloat(amount) > cashBalance) {
+    // Cash cap: only applies when paying by cash
+    if (paymentMethod === 'cash' && cashBalance !== null && parseFloat(amount) > cashBalance) {
       return showError('ex_amount', `Amount exceeds Cash Balance. Available: ${parseFloat(cashBalance).toFixed(2)}`);
     }
     if (!payee.trim()) return showError('ex_payee', 'Paid To is required');
@@ -701,7 +791,13 @@ function AddExpenseModal({ onSave, onClose }) {
     setPayee(result.supplierName);
     setAmount(String(result.total));
     setNote(`Ref: ${result.invoiceRef}`);
-    setPaymentMethod(result.paymentType === 'cash' ? 'cash' : 'other');
+    setPaymentMethod(result.paymentType === 'cash' ? 'cash' : 'on_credit');
+  };
+
+  const handleSimpleSupplierSave = async (supplierName) => {
+    setShowSimpleSupplierModal(false);
+    setPayee(supplierName);
+    dataService.getSuppliers().then(s => setSuppliersList(s || []));
   };
 
   return (
@@ -753,7 +849,7 @@ function AddExpenseModal({ onSave, onClose }) {
                 placeholder="0.00" min="0" step="0.01" disabled={!seq_amount}
                 value={amount} onChange={e => { if(seq_amount){ setAmount(e.target.value); clearFieldError('ex_amount'); } }} />
               <ValidationNote field="ex_amount" errors={fieldErrors} />
-              {cashBalance !== null && parseFloat(amount) > 0 && parseFloat(amount) > cashBalance && (
+              {paymentMethod === 'cash' && cashBalance !== null && parseFloat(amount) > 0 && parseFloat(amount) > cashBalance && (
                 <div style={{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:'6px',padding:'6px 10px',fontSize:'12px',color:'#b91c1c',marginTop:'4px'}}>
                   ⚠️ Amount exceeds Cash Balance ({parseFloat(cashBalance).toFixed(2)}).
                 </div>
@@ -762,7 +858,10 @@ function AddExpenseModal({ onSave, onClose }) {
             <div className="er-field">
               <label className="er-label">Payment Method</label>
               <select className="er-input er-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                <option value="">Select payment method</option>
+                {(category === 'Owner Drawings' ? OWNER_DRAWINGS_PAYMENT_METHODS : PAYMENT_METHODS).map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
 
@@ -812,13 +911,17 @@ function AddExpenseModal({ onSave, onClose }) {
           initialSupplierName={payee} initialSupplierId={null} suppliersList={suppliersList}
           onSave={handleAssetsResult}
           onClose={() => { setShowAssetsModal(false); if (!assetsResult) setCategory(''); }}
-          onNewSupplier={() => { setShowAssetsModal(false); setShowNewSupplierModal(true); }}
+          onNewSupplier={() => { setShowAssetsModal(false); setShowSimpleSupplierModal(true); }}
         />
       )}
-      {showNewSupplierModal && (
-        <NewSupplierModal suppliersList={suppliersList}
-          onSave={result => { setShowNewSupplierModal(false); handleAssetsResult(result); dataService.getSuppliers().then(s => setSuppliersList(s || [])); }}
-          onClose={() => { setShowNewSupplierModal(false); setShowAssetsModal(true); }}
+      {showSimpleSupplierModal && (
+        <SimpleAddSupplierModal
+          onSave={async (newSupplier) => {
+            await dataService.getSuppliers().then(s => setSuppliersList(s || []));
+            setPayee(newSupplier.name);
+            setShowSimpleSupplierModal(false);
+          }}
+          onClose={() => setShowSimpleSupplierModal(false)}
         />
       )}
     </div>
