@@ -402,191 +402,6 @@ function SimpleAddSupplierModal({ onSave, onClose }) {
   );
 }
 
-// ── Add Operational Assets Modal (migrated from CashRecord) ────────────────────
-function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, suppliersList: initialSuppliersList, onSave, onClose, onNewSupplier }) {
-  const { fmt } = useCurrency();
-  const { fieldErrors, showError, clearFieldError } = useValidation();
-  const [supplierSearch, setSupplierSearch] = useState(initialSupplierName || '');
-  const [showSupplierDrop, setShowSupplierDrop] = useState(false);
-  const [resolvedSupplierId, setResolvedSupplierId] = useState(initialSupplierId || null);
-  const [paymentType, setPaymentType] = useState('cash');
-  const [invoiceRef, setInvoiceRef] = useState('');
-  const [comments, setComments]     = useState('');
-  const [date, setDate] = useState(todayStr);
-  const [saving, setSaving] = useState(false);
-  const nextId = useRef(2);
-  const [items, setItems] = useState([{ id:1, name:'', qty:'', costPrice:'' }]);
-  const [cashBalance, setCashBalance] = useState(null);
-  const [suppliersList, setSuppliersList] = useState(initialSuppliersList || []);
-
-  useEffect(() => {
-    dataService.getCashEntries().then(entries => {
-      const bal = (entries||[]).reduce((sum,e) => sum + (e.type==='in'?(e.amount||0):-(e.amount||0)), 0);
-      setCashBalance(bal);
-    });
-  }, []);
-
-  const filteredSuppliers = suppliersList.filter(s =>
-    (s.name||s.customerName||'').toLowerCase().includes(supplierSearch.toLowerCase())
-  );
-  const updateItem = (id,field,val) => setItems(prev => prev.map(it => it.id===id?{...it,[field]:val}:it));
-  const addItem = () => setItems(prev => [...prev, { id:nextId.current++, name:'', qty:'', costPrice:'' }]);
-  const removeItem = id => setItems(prev => prev.filter(it => it.id!==id));
-  const grandTotal = items.reduce((sum,it) => sum+(parseFloat(it.qty)||0)*(parseFloat(it.costPrice)||0), 0);
-  const lastItemComplete = () => { const last=items[items.length-1]; return last && last.name.trim() && parseFloat(last.qty)>0; };
-
-  const handleSave = async () => {
-    const supplierName = supplierSearch.trim();
-    if (!supplierName) return showError('oa_supplier','Enter the Supplier Name');
-    if (!invoiceRef.trim()) return showError('oa_ref','Enter the Invoice / Ref');
-    if (!date) return showError('oa_date','Enter the Date');
-    const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty)>0);
-    if (validItems.length===0) return showError('oa_items','Add at least one item');
-    const badItems = items.filter(it => it.name.trim() && !(parseFloat(it.qty)>0));
-    if (badItems.length>0) { badItems.forEach(it => showError('oa_qty_'+it.id,'Enter a quantity')); return; }
-    if (paymentType==='cash' && cashBalance!==null && grandTotal>cashBalance)
-      return showError('oa_items',`Total exceeds Cash Balance. Reduce amount or switch to Credit.`);
-
-    setSaving(true);
-    try {
-      const dateISO = new Date(date+'T12:00:00').toISOString();
-      const savedItems = [];
-      for (const it of validItems) {
-        const qty=parseFloat(it.qty)||0, costPrice=parseFloat(it.costPrice)||0, subtotal=qty*costPrice;
-        await dataService.addOperationalAsset({ name:it.name.trim(), qty, costPrice, subtotal, supplierName, supplierId:resolvedSupplierId||null, invoiceRef:invoiceRef.trim(), paymentType, comments:comments.trim(), date:dateISO, source:'purchase' });
-        savedItems.push({ name:it.name.trim(), qty, costPrice, subtotal });
-      }
-      if (paymentType==='cash' && grandTotal>0) {
-        await dataService.addCashEntry({ type:'out', amount:grandTotal, note:`Paid ${supplierName} for ref: ${invoiceRef.trim()}`, date:dateISO, source:'purchase', business_date:date, invoiceRef:invoiceRef.trim() });
-      }
-      onSave({ supplierName, supplierId:resolvedSupplierId||null, paymentType, total:grandTotal, invoiceRef:invoiceRef.trim(), itemsSummary:savedItems.map(i=>i.name).join(', '), items:savedItems });
-    } catch (e) { console.error(e); showError('oa_items','Failed to save. Please try again.'); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:4500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ background:'var(--surface, white)', color:'var(--text-primary, #111)', borderRadius:'14px', width:'100%', maxWidth:'480px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 12px 48px rgba(0,0,0,0.3)', overflow:'hidden' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
-          <h2 style={{ margin:0, fontSize:'16px', fontWeight:700 }}>🛒 Buy Operational Assets / Expenses{resolvedSupplierId && supplierSearch.trim()?` from ${supplierSearch.trim()}`:''}</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-secondary, #6b7280)', padding:'4px' }}><X size={20}/></button>
-        </div>
-        <div style={{ overflowY:'auto', padding:'20px', flex:1, display:'flex', flexDirection:'column', gap:'16px' }}>
-          <div style={{ position:'relative' }}>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Supplier Name *</label>
-            <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
-              <div style={{ flex:1, position:'relative' }}>
-                <input data-field="oa_supplier" style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box', ...errorBorder('oa_supplier',fieldErrors) }}
-                  value={supplierSearch} placeholder="Search existing suppliers"
-                  onChange={e => { setSupplierSearch(e.target.value); setShowSupplierDrop(true); setResolvedSupplierId(null); clearFieldError('oa_supplier'); }}
-                  onFocus={() => setShowSupplierDrop(true)} onBlur={() => setTimeout(() => setShowSupplierDrop(false),180)} />
-                {showSupplierDrop && filteredSuppliers.length>0 && (
-                  <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:500, background:'var(--surface, white)', border:'1px solid var(--border, #e5e7eb)', borderRadius:'8px', boxShadow:'0 4px 16px rgba(0,0,0,0.12)', maxHeight:'160px', overflowY:'auto' }}>
-                    {filteredSuppliers.map(s => { const n=s.name||s.customerName||''; return (
-                      <button key={s.id} onMouseDown={() => { setSupplierSearch(n); setResolvedSupplierId(s.id); setShowSupplierDrop(false); }}
-                        style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 14px', background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'var(--text-primary, #111)' }}>{n}</button>
-                    ); })}
-                  </div>
-                )}
-              </div>
-              {onNewSupplier && (<button onClick={onNewSupplier} style={{ padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600, border:'2px solid #667eea', background:'#eef2ff', color:'#667eea', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ New Supplier</button>)}
-            </div>
-            <ValidationNote field="oa_supplier" errors={fieldErrors} />
-          </div>
-          <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Invoice / Ref *</label>
-            <input style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={invoiceRef} placeholder="Receipt or invoice number…" onChange={e => setInvoiceRef(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Comments <span style={{ fontWeight:400, color:'#9ca3af' }}>(optional)</span></label>
-            <textarea style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box', minHeight:'70px', resize:'vertical' }} value={comments} placeholder="Any additional notes or comments…" onChange={e => setComments(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' }}>Date *</label>
-            <input type="date" style={{ width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={date} max={todayStr()} onChange={e => setDate(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ display:'block', fontWeight:600, fontSize:'13px', marginBottom:'8px', color:'var(--text-primary, #374151)' }}>Items *</label>
-            <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-              {items.map((it,idx) => { const sub=(parseFloat(it.qty)||0)*(parseFloat(it.costPrice)||0); return (
-                <div key={it.id} style={{ border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'10px', padding:'12px', background:'var(--background, #f9fafb)', display:'flex', flexDirection:'column', gap:'10px' }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <span style={{ fontSize:'12px', fontWeight:700, color:'#667eea' }}>Item {idx+1}</span>
-                    {items.length>1 && <button onClick={() => removeItem(it.id)} style={{ background:'#fee2e2', border:'none', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#dc2626', display:'flex', alignItems:'center', gap:'4px', fontSize:'12px' }}><Trash2 size={12}/> Remove</button>}
-                  </div>
-                  <div><label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Asset Name *</label>
-                    <input style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={it.name} placeholder="e.g. Generator, Office Chair…" onChange={e => updateItem(it.id,'name',e.target.value)} /></div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Quantity *</label>
-                      <input type="number" min="0" step="1" style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={it.qty} placeholder="0" onChange={e => updateItem(it.id,'qty',e.target.value)} /></div>
-                    <div><label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Unit Cost</label>
-                      <input type="number" min="0" step="0.01" style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }} value={it.costPrice} placeholder="0.00" onChange={e => updateItem(it.id,'costPrice',e.target.value)} /></div>
-                  </div>
-                  {sub>0 && <div style={{ padding:'6px 10px', background:'#f0f4ff', border:'1px solid #c7d2fe', borderRadius:'7px', fontSize:'12px', color:'#4338ca', fontWeight:600 }}>Subtotal: {sub.toFixed(2)}</div>}
-                  <ValidationNote field={`oa_qty_${it.id}`} errors={fieldErrors} />
-                </div>
-              ); })}
-            </div>
-            <ValidationNote field="oa_items" errors={fieldErrors} />
-            <button onClick={addItem} disabled={!lastItemComplete()} style={{ marginTop:'10px', width:'100%', padding:'10px', border:'1.5px dashed var(--border, #d1d5db)', borderRadius:'8px', background:lastItemComplete()?'var(--surface, white)':'var(--background, #f9fafb)', color:lastItemComplete()?'#667eea':'#9ca3af', cursor:lastItemComplete()?'pointer':'not-allowed', fontSize:'13px', fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}><Plus size={14}/> Add Another Item</button>
-          </div>
-          {grandTotal>0 && (
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#f0f4ff', border:'1.5px solid #c7d2fe', borderRadius:'10px' }}>
-              <span style={{ fontWeight:700, fontSize:'14px', color:'#4338ca' }}>Grand Total</span>
-              <span style={{ fontWeight:800, fontSize:'15px', color:'#3730a3' }}>{fmt(grandTotal)}</span>
-            </div>
-          )}
-          {paymentType==='cash' && cashBalance!==null && grandTotal>cashBalance && grandTotal>0 && (
-            <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'8px', padding:'10px 12px', fontSize:'12px', color:'#b91c1c' }}>
-              ⚠️ Total ({fmt(grandTotal)}) exceeds Cash Balance ({fmt(cashBalance)}).
-            </div>
-          )}
-        </div>
-        <div style={{ display:'flex', gap:'10px', padding:'16px 20px', borderTop:'1px solid var(--border, #e5e7eb)', flexShrink:0 }}>
-          <button onClick={onClose} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'1.5px solid var(--border, #e5e7eb)', background:'var(--surface, white)', color:'var(--text-primary, #111)', cursor:'pointer', fontWeight:600, fontSize:'14px' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'12px', borderRadius:'8px', border:'none', background:saving?'#9ca3af':'#f59e0b', color:'white', cursor:saving?'not-allowed':'pointer', fontWeight:700, fontSize:'14px' }}>{saving?'Saving…':'Save Assets'}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Group / Organisation child modal ─────────────────────────────────────────
-function GroupOrgModal({ mode, onConfirm, onClose }) {
-  const label = mode === 'community' ? 'Community Name' : 'Church, Group, NGO or Cause';
-  const placeholder = mode === 'community' ? 'e.g. Honiara Village' : 'e.g. Red Cross, Church of Melanesia…';
-  const [name, setName] = useState('');
-  return (
-    <div className="er-cat-modal-overlay" onClick={onClose} style={{ zIndex: 2100 }}>
-      <div className="er-cat-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 340 }}>
-        <div className="er-modal-header" style={{ borderRadius: '20px 20px 0 0' }}>
-          <h2>{mode === 'community' ? '🏘️ Community' : '🤝 Group / Organisation'}</h2>
-          <button className="er-modal-close" onClick={onClose}><X size={20} /></button>
-        </div>
-        <div style={{ padding: '20px 20px 10px' }}>
-          <label className="er-label">{label} *</label>
-          <input
-            className="er-input"
-            style={{ marginTop: 6 }}
-            placeholder={placeholder}
-            value={name}
-            autoFocus
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onConfirm(name.trim()); }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 10, padding: '10px 20px 20px' }}>
-          <button className="er-btn-cancel" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
-          <button className="er-btn-save" onClick={() => { if (name.trim()) onConfirm(name.trim()); }}
-            style={{ flex: 1 }} disabled={!name.trim()}>Confirm</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Paid To smart dropdown ────────────────────────────────────────────────────
-
 // ── Build description string from expense fields ──────────────────────────────
 function buildExpenseDescription(category, payee, note, gender) {
   const sysFee = SYSTEM_FEE_CAT;
@@ -601,131 +416,30 @@ function buildExpenseDescription(category, payee, note, gender) {
   return `Paid ${payee || note || '—'} for ${category || 'expense'}`;
 }
 
-function PaidToField({ category, value, onChange, onSupplierClick, fieldErrors, clearFieldError, users }) {
-  const [open, setOpen] = useState(false);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [groupModalMode, setGroupModalMode] = useState('donation');
-  const wrapRef = useRef(null);
 
-  const payeeMode = CATEGORY_PAYEE_MODE[category] || 'supplier';
-
-  // Role matching mirrors exactly what the Admin app (UserSettings.jsx) stores:
-  // 'Shop Owner'|'owner', 'Shop Manager'|'manager', 'Shopkeeper'|'staff', 'Landlord'
-  const owner    = users.find(u => ['shop owner','owner'].includes((u.role||'').toLowerCase()));
-  const manager  = users.find(u => ['shop manager','manager'].includes((u.role||'').toLowerCase()));
-  const staff    = users.filter(u => ['shopkeeper','staff'].includes((u.role||'').toLowerCase()));
-  const landlord = users.find(u => u.id === '__landlord__' || (u.role||'').toLowerCase() === 'landlord');
-
-  // Firebase stores the person's name in the 'fullName' field (set by Admin → UserSettings)
-  const displayName = u => u?.fullName || u?.name || u?.displayName || u?.email?.split('@')[0] || '—';
-
-  let suggestions = [];
-  if (payeeMode === 'owner' && owner) {
-    suggestions = [{ label: displayName(owner), value: displayName(owner), icon: '👤' }];
-  } else if (payeeMode === 'wages') {
-    if (manager) suggestions.push({ label: displayName(manager), value: displayName(manager), icon: '🧑‍💼' });
-    staff.forEach(s => suggestions.push({ label: displayName(s), value: displayName(s), icon: '👷' }));
-  } else if (payeeMode === 'landlord' && landlord) {
-    suggestions = [{ label: displayName(landlord), value: displayName(landlord), icon: '🏠' }];
-  } else if (payeeMode === 'donation') {
-    suggestions = [{ label: 'Group or Organisation', value: '__group__', icon: '🤝', isAction: true }];
-  } else if (payeeMode === 'community') {
-    suggestions = [{ label: 'Community', value: '__community__', icon: '🏘️', isAction: true }];
-  } else if (payeeMode === 'system_fee') {
-    suggestions = [{ label: 'Sinita POS Systems (SPOSH)', value: 'Sinita POS Systems (SPOSH)', icon: '💻' }];
-  } else {
-    suggestions = [{ label: 'Supplier', value: '__supplier__', icon: '🛒', isAction: true }];
-  }
-
-  useEffect(() => {
-    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const handleSelect = (item) => {
-    setOpen(false);
-    if (item.value === '__supplier__')  { onSupplierClick(); return; }
-    if (item.value === '__group__')     { setGroupModalMode('donation');  setShowGroupModal(true); return; }
-    if (item.value === '__community__') { setGroupModalMode('community'); setShowGroupModal(true); return; }
-    onChange(item.value);
-    clearFieldError('ex_payee');
-  };
-
-  const handleGroupConfirm = (name) => {
-    setShowGroupModal(false);
-    onChange(name);
-    clearFieldError('ex_payee');
-  };
-
-  return (
-    <div className="er-field" ref={wrapRef} style={{ position: 'relative' }}>
-      <label className="er-label">Paid To *</label>
-      <input
-        type="text"
-        className="er-input"
-        data-field="ex_payee"
-        style={errorBorder('ex_payee', fieldErrors)}
-        placeholder="Who was paid?"
-        value={value}
-        onChange={e => { onChange(e.target.value); clearFieldError('ex_payee'); }}
-        onFocus={() => setOpen(true)}
-        autoComplete="off"
-      />
-      <ValidationNote field="ex_payee" errors={fieldErrors} />
-
-      {open && suggestions.length > 0 && (
-        <div className="er-payee-dropdown">
-          {suggestions.map((item, i) => (
-            <button
-              key={i}
-              className={`er-payee-option${item.isAction ? ' er-payee-action' : ''}`}
-              onMouseDown={e => { e.preventDefault(); handleSelect(item); }}
-            >
-              <span className="er-payee-icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {showGroupModal && (
-        <GroupOrgModal
-          mode={groupModalMode}
-          onConfirm={handleGroupConfirm}
-          onClose={() => setShowGroupModal(false)}
-        />
-      )}
-    </div>
-  );
-}
 
 // ── Add Expense Modal ──────────────────────────────────────────────────────────
 function AddExpenseModal({ onSave, onClose }) {
   const { fmt } = useCurrency();
   const { fieldErrors, showError, clearFieldError } = useValidation();
 
-  const [date, setDate]                       = useState(todayStr());
-  const [category, setCategory]               = useState('');
-  const [amount, setAmount]                   = useState('');
-  const [paymentMethod, setPaymentMethod]     = useState('cash');
-  const [payee, setPayee]                     = useState('');
-  const [note, setNote]                       = useState('');
-  const [saving, setSaving]                   = useState(false);
+  const [date, setDate]                   = useState(todayStr());
+  const [category, setCategory]           = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [showSupplierDrop, setShowSupplierDrop] = useState(false);
+  const [resolvedSupplierId, setResolvedSupplierId] = useState(null);
+  const [note, setNote]                   = useState('');
+  const [saving, setSaving]               = useState(false);
 
-  // ── Sequential unlock (Date is always first and always enabled) ──
-  const seq_cat    = !!date;                                       // Category unlocks after Date
-  const seq_amount = seq_cat && !!category;                        // Amount unlocks after Category
-  const seq_payee  = seq_amount && parseFloat(amount) > 0;         // Paid To unlocks after Amount
-  const seq_note   = seq_payee && !!payee.trim();                  // Note unlocks after Paid To
+  const nextItemId = useRef(2);
+  const [items, setItems]                 = useState([{ id:1, name:'', qty:'', costPrice:'' }]);
 
-  const [showCatModal, setShowCatModal]                   = useState(false);
-  const [showAssetsModal, setShowAssetsModal]             = useState(false);
+  const [showCatModal, setShowCatModal]               = useState(false);
   const [showSimpleSupplierModal, setShowSimpleSupplierModal] = useState(false);
-  const [suppliersList, setSuppliersList]     = useState([]);
-  const [assetsResult, setAssetsResult]       = useState(null);
-  const [users, setUsers]                     = useState([]);
-  const [cashBalance, setCashBalance]         = useState(null);
+  const [suppliersList, setSuppliersList] = useState([]);
+  const [users, setUsers]                 = useState([]);
+  const [cashBalance, setCashBalance]     = useState(null);
 
   useEffect(() => {
     dataService.getSuppliers().then(s => setSuppliersList(s || []));
@@ -739,66 +453,65 @@ function AddExpenseModal({ onSave, onClose }) {
     });
   }, []);
 
-  useEffect(() => { setPayee(''); setPaymentMethod('cash'); }, [category]);
+  useEffect(() => {
+    setSupplierSearch('');
+    setResolvedSupplierId(null);
+    setPaymentMethod('cash');
+    setItems([{ id:1, name:'', qty:'', costPrice:'' }]);
+    nextItemId.current = 2;
+  }, [category]);
 
-  const isSupplierPurchase = category === 'Supplier Purchase';
+  // Sequential unlock
+  const seq_cat   = !!date;
+  const seq_payee = seq_cat && !!category;
+  const seq_items = seq_payee && !!supplierSearch.trim();
+  const seq_note  = seq_items && items.some(it => it.name.trim() && parseFloat(it.qty) > 0);
+
+  const filteredSuppliers = suppliersList.filter(s =>
+    (s.name||s.customerName||'').toLowerCase().includes(supplierSearch.toLowerCase())
+  );
+
+  const updateItem = (id,field,val) => setItems(prev => prev.map(it => it.id===id?{...it,[field]:val}:it));
+  const addItem    = () => setItems(prev => [...prev, { id:nextItemId.current++, name:'', qty:'', costPrice:'' }]);
+  const removeItem = id => setItems(prev => prev.filter(it => it.id!==id));
+  const grandTotal = items.reduce((sum,it) => sum+(parseFloat(it.qty)||0)*(parseFloat(it.costPrice)||0), 0);
+  const lastItemComplete = () => { const last=items[items.length-1]; return last && last.name.trim() && parseFloat(last.qty)>0; };
 
   const handleSave = async () => {
-    if (!date)     return showError('ex_date',   'Date is required');
-    if (!category) return showError('ex_cat',    'Category is required');
-
-    if (isSupplierPurchase) {
-      if (!assetsResult) return showError('ex_cat', 'Please complete the supplier purchase form');
-      try {
-        const now = new Date().toISOString();
-        await dataService.addExpense({
-          date, amount: assetsResult.total,
-          category: 'Supplier Purchase',
-          paymentMethod: assetsResult.paymentType,
-          payee: assetsResult.supplierName,
-          note: `Ref: ${assetsResult.invoiceRef} — ${assetsResult.itemsSummary || ''}`,
-          createdAt: now, updatedAt: now,
-          _skipCashEntry: true,
-        });
-        onSave();
-      } catch (e) { console.error(e); showError('ex_cat', 'Failed to save. Please try again.'); }
-      return;
-    }
-
-    if (!amount || parseFloat(amount) <= 0) return showError('ex_amount', 'Enter a valid amount');
-    // Cash cap: only applies when paying by cash
-    if (paymentMethod === 'cash' && cashBalance !== null && parseFloat(amount) > cashBalance) {
-      return showError('ex_amount', `Amount exceeds Cash Balance. Available: ${parseFloat(cashBalance).toFixed(2)}`);
-    }
-    if (!payee.trim()) return showError('ex_payee', 'Paid To is required');
+    if (!date)                  return showError('ex_date',  'Date is required');
+    if (!category)              return showError('ex_cat',   'Category is required');
+    if (!supplierSearch.trim()) return showError('ex_payee', 'Paid To is required');
+    const validItems = items.filter(it => it.name.trim() && parseFloat(it.qty)>0);
+    if (validItems.length===0)  return showError('ex_items', 'Add at least one item');
+    const badItems = items.filter(it => it.name.trim() && !(parseFloat(it.qty)>0));
+    if (badItems.length>0) { badItems.forEach(it => showError('ex_qty_'+it.id,'Enter a quantity')); return; }
+    if (paymentMethod==='cash' && cashBalance!==null && grandTotal>cashBalance)
+      return showError('ex_items', `Total exceeds Cash Balance. Available: ${fmt(cashBalance)}`);
 
     setSaving(true);
     try {
       const now = new Date().toISOString();
-      // Resolve gender of payee from users list
-      const payeeUser = users.find(u => (u.fullName||u.name||'').toLowerCase() === payee.trim().toLowerCase());
+      const supplierName = supplierSearch.trim();
+      const itemsSummary = validItems.map(it => it.name.trim()).join(', ');
+      const payeeUser = users.find(u => (u.fullName||u.name||'').toLowerCase() === supplierName.toLowerCase());
       const payeeGender = payeeUser?.gender || '';
-      await dataService.addExpense({ date, amount: parseFloat(amount), category, paymentMethod, payee: payee.trim(), note: note.trim(), gender: payeeGender, createdAt: now, updatedAt: now });
-      await logAction('EXPENSE_ADDED', `Expense: ${category} — $${parseFloat(amount).toFixed(2)} paid to ${payee.trim()}`).catch(() => {});
+
+      if (category === 'Supplier Purchase') {
+        const dateISO = new Date(date+'T12:00:00').toISOString();
+        for (const it of validItems) {
+          const qty=parseFloat(it.qty)||0, costPrice=parseFloat(it.costPrice)||0, subtotal=qty*costPrice;
+          await dataService.addOperationalAsset({ name:it.name.trim(), qty, costPrice, subtotal, supplierName, supplierId:resolvedSupplierId||null, paymentType:paymentMethod==='on_credit'?'credit':'cash', date:dateISO, source:'purchase' });
+        }
+      }
+      await dataService.addExpense({ date, amount:grandTotal, category, paymentMethod, payee:supplierName, note:note.trim()||itemsSummary, gender:payeeGender, createdAt:now, updatedAt:now });
+      await logAction('EXPENSE_ADDED', `Expense: ${category} — $${grandTotal.toFixed(2)} paid to ${supplierName}`).catch(() => {});
       onSave();
     } catch (e) { console.error(e); showError('ex_date', 'Failed to save. Please try again.'); }
     finally { setSaving(false); }
   };
 
-  const handleAssetsResult = (result) => {
-    setAssetsResult(result);
-    setShowAssetsModal(false);
-    setPayee(result.supplierName);
-    setAmount(String(result.total));
-    setNote(`Ref: ${result.invoiceRef}`);
-    setPaymentMethod(result.paymentType === 'cash' ? 'cash' : 'on_credit');
-  };
-
-  const handleSimpleSupplierSave = async (supplierName) => {
-    setShowSimpleSupplierModal(false);
-    setPayee(supplierName);
-    dataService.getSuppliers().then(s => setSuppliersList(s || []));
-  };
+  const inFs = { width:'100%', padding:'10px 12px', border:'2px solid var(--border, #e5e7eb)', borderRadius:'8px', fontSize:'14px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' };
+  const inLs = { display:'block', fontWeight:600, fontSize:'13px', marginBottom:'6px', color:'var(--text-primary, #374151)' };
 
   return (
     <div className="er-modal-overlay">
@@ -809,6 +522,7 @@ function AddExpenseModal({ onSave, onClose }) {
         </div>
         <div className="er-modal-body">
 
+          {/* Date */}
           <div className="er-field">
             <label className="er-label">Date *</label>
             <input type="date" className="er-input" data-field="ex_date"
@@ -817,10 +531,11 @@ function AddExpenseModal({ onSave, onClose }) {
             <ValidationNote field="ex_date" errors={fieldErrors} />
           </div>
 
+          {/* Category */}
           <div className="er-field">
             <label className="er-label">Category *</label>
             <button data-field="ex_cat"
-              style={{ width: '100%', ...errorBorder('ex_cat', fieldErrors), textAlign: 'left', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid var(--border,#e5e7eb)', background: 'var(--surface,white)', fontSize: '14px', cursor: seq_cat ? 'pointer' : 'not-allowed', color: category ? 'var(--text-primary,#111)' : '#9ca3af', opacity: seq_cat ? 1 : 0.4 }}
+              style={{ width:'100%', ...errorBorder('ex_cat', fieldErrors), textAlign:'left', padding:'10px 12px', borderRadius:'8px', border:'1.5px solid var(--border,#e5e7eb)', background:'var(--surface,white)', fontSize:'14px', cursor:seq_cat?'pointer':'not-allowed', color:category?'var(--text-primary,#111)':'#9ca3af', opacity:seq_cat?1:0.4 }}
               disabled={!seq_cat}
               onClick={() => { if(seq_cat){ setShowCatModal(true); clearFieldError('ex_cat'); } }}>
               {category || 'Select category…'}
@@ -828,73 +543,125 @@ function AddExpenseModal({ onSave, onClose }) {
             <ValidationNote field="ex_cat" errors={fieldErrors} />
           </div>
 
-          {isSupplierPurchase && assetsResult && (
-            <div style={{ padding: '10px 14px', background: assetsResult.paymentType === 'cash' ? '#f0fdf4' : '#eff6ff', border: `1.5px solid ${assetsResult.paymentType === 'cash' ? '#16a34a' : '#3b82f6'}`, borderRadius: '8px', fontSize: '13px', color: assetsResult.paymentType === 'cash' ? '#166534' : '#1e40af' }}>
-              <div style={{ fontWeight: 700, marginBottom: '2px' }}>{assetsResult.paymentType === 'cash' ? '✓ Cash Purchase' : '✓ Credit Purchase'} — Ref: {assetsResult.invoiceRef}</div>
-              <div style={{ fontSize: '12px', opacity: 0.85 }}>{assetsResult.supplierName} · {fmt(assetsResult.total)}</div>
-              <button onClick={() => setShowAssetsModal(true)} style={{ marginTop: '6px', fontSize: '11px', color: '#667eea', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Edit / Change</button>
-            </div>
-          )}
-          {isSupplierPurchase && !assetsResult && (
-            <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1.5px solid #f59e0b', borderRadius: '8px', fontSize: '13px', color: '#92400e' }}>
-              ⚠️ Tap <strong>🛒 Supplier</strong> in the Paid To field to complete the purchase form.
-            </div>
-          )}
+          {/* Payment Method */}
+          <div className="er-field" style={{ opacity:seq_payee?1:0.4, pointerEvents:seq_payee?'auto':'none' }}>
+            <label className="er-label">Payment Method</label>
+            <select className="er-input er-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} disabled={!seq_payee}>
+              <option value="">Select payment method</option>
+              {(category === 'Owner Drawings' ? OWNER_DRAWINGS_PAYMENT_METHODS : PAYMENT_METHODS).map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
 
-          {!isSupplierPurchase && (<>
-            <div className="er-field">
-              <label className="er-label">Amount *</label>
-              <input type="number" className="er-input" data-field="ex_amount"
-                style={{...errorBorder('ex_amount', fieldErrors), ...(!seq_amount?{opacity:0.4,cursor:'not-allowed'}:{})}}
-                placeholder="0.00" min="0" step="0.01" disabled={!seq_amount}
-                value={amount} onChange={e => { if(seq_amount){ setAmount(e.target.value); clearFieldError('ex_amount'); } }} />
-              <ValidationNote field="ex_amount" errors={fieldErrors} />
-              {paymentMethod === 'cash' && cashBalance !== null && parseFloat(amount) > 0 && parseFloat(amount) > cashBalance && (
-                <div style={{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:'6px',padding:'6px 10px',fontSize:'12px',color:'#b91c1c',marginTop:'4px'}}>
-                  ⚠️ Amount exceeds Cash Balance ({parseFloat(cashBalance).toFixed(2)}).
+          {/* Paid To — supplier search style */}
+          <div style={{ opacity:seq_payee?1:0.4, pointerEvents:seq_payee?'auto':'none' }}>
+            <div style={{ position:'relative' }}>
+              <label style={inLs}>Paid To *</label>
+              <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
+                <div style={{ flex:1, position:'relative' }}>
+                  <input
+                    data-field="ex_payee"
+                    style={{ ...inFs, ...errorBorder('ex_payee', fieldErrors) }}
+                    value={supplierSearch}
+                    placeholder="Search or type name…"
+                    disabled={!seq_payee}
+                    onChange={e => { setSupplierSearch(e.target.value); setShowSupplierDrop(true); setResolvedSupplierId(null); clearFieldError('ex_payee'); }}
+                    onFocus={() => setShowSupplierDrop(true)}
+                    onBlur={() => setTimeout(() => setShowSupplierDrop(false), 180)}
+                  />
+                  {showSupplierDrop && filteredSuppliers.length>0 && (
+                    <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:500, background:'var(--surface, white)', border:'1px solid var(--border, #e5e7eb)', borderRadius:'8px', boxShadow:'0 4px 16px rgba(0,0,0,0.12)', maxHeight:'160px', overflowY:'auto' }}>
+                      {filteredSuppliers.map(s => { const n=s.name||s.customerName||''; return (
+                        <button key={s.id} onMouseDown={() => { setSupplierSearch(n); setResolvedSupplierId(s.id); setShowSupplierDrop(false); clearFieldError('ex_payee'); }}
+                          style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 14px', background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'var(--text-primary, #111)' }}>{n}</button>
+                      ); })}
+                    </div>
+                  )}
                 </div>
-              )}
+                <button onClick={() => setShowSimpleSupplierModal(true)} disabled={!seq_payee}
+                  style={{ padding:'10px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:600, border:'2px solid #667eea', background:'#eef2ff', color:'#667eea', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+                  + New Supplier
+                </button>
+              </div>
+              <ValidationNote field="ex_payee" errors={fieldErrors} />
             </div>
-            <div className="er-field">
-              <label className="er-label">Payment Method</label>
-              <select className="er-input er-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                <option value="">Select payment method</option>
-                {(category === 'Owner Drawings' ? OWNER_DRAWINGS_PAYMENT_METHODS : PAYMENT_METHODS).map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-            </div>
+          </div>
 
-            <div style={{opacity: seq_payee ? 1 : 0.4, pointerEvents: seq_payee ? 'auto' : 'none'}}>
-            <PaidToField
-              category={category}
-              value={payee}
-              onChange={setPayee}
-              onSupplierClick={() => { setCategory('Supplier Purchase'); setAssetsResult(null); clearFieldError('ex_cat'); setShowAssetsModal(true); }}
-              fieldErrors={fieldErrors}
-              clearFieldError={clearFieldError}
-              users={users}
-            />
+          {/* Items */}
+          <div style={{ opacity:seq_items?1:0.4, pointerEvents:seq_items?'auto':'none' }}>
+            <label style={{ ...inLs, marginBottom:'8px' }}>Items *</label>
+            <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+              {items.map((it,idx) => { const sub=(parseFloat(it.qty)||0)*(parseFloat(it.costPrice)||0); return (
+                <div key={it.id} style={{ border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'10px', padding:'12px', background:'var(--background, #f9fafb)', display:'flex', flexDirection:'column', gap:'10px' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span style={{ fontSize:'12px', fontWeight:700, color:'#667eea' }}>Item {idx+1}</span>
+                    {items.length>1 && <button onClick={() => removeItem(it.id)} style={{ background:'#fee2e2', border:'none', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#dc2626', display:'flex', alignItems:'center', gap:'4px', fontSize:'12px' }}><Trash2 size={12}/> Remove</button>}
+                  </div>
+                  <div>
+                    <label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Item Name *</label>
+                    <input style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }}
+                      value={it.name} placeholder="e.g. Electricity bill, Rice, Wages…" disabled={!seq_items}
+                      onChange={e => updateItem(it.id,'name',e.target.value)} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                    <div>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Quantity *</label>
+                      <input type="number" min="0" step="1"
+                        style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }}
+                        value={it.qty} placeholder="0" disabled={!seq_items}
+                        onChange={e => updateItem(it.id,'qty',e.target.value)} />
+                      <ValidationNote field={`ex_qty_${it.id}`} errors={fieldErrors} />
+                    </div>
+                    <div>
+                      <label style={{ display:'block', fontSize:'12px', fontWeight:600, color:'var(--text-secondary, #6b7280)', marginBottom:'4px' }}>Unit Cost</label>
+                      <input type="number" min="0" step="0.01"
+                        style={{ width:'100%', padding:'8px 10px', border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'7px', fontSize:'13px', background:'var(--surface, white)', color:'var(--text-primary, #111)', boxSizing:'border-box' }}
+                        value={it.costPrice} placeholder="0.00" disabled={!seq_items}
+                        onChange={e => updateItem(it.id,'costPrice',e.target.value)} />
+                    </div>
+                  </div>
+                  {sub>0 && <div style={{ padding:'6px 10px', background:'#f0f4ff', border:'1px solid #c7d2fe', borderRadius:'7px', fontSize:'12px', color:'#4338ca', fontWeight:600 }}>Subtotal: {fmt(sub)}</div>}
+                </div>
+              ); })}
             </div>
+            <ValidationNote field="ex_items" errors={fieldErrors} />
+            <button onClick={addItem} disabled={!lastItemComplete() || !seq_items}
+              style={{ marginTop:'10px', width:'100%', padding:'10px', border:'1.5px dashed var(--border, #d1d5db)', borderRadius:'8px', background:(lastItemComplete()&&seq_items)?'var(--surface, white)':'var(--background, #f9fafb)', color:(lastItemComplete()&&seq_items)?'#667eea':'#9ca3af', cursor:(lastItemComplete()&&seq_items)?'pointer':'not-allowed', fontSize:'13px', fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+              <Plus size={14}/> Add Another Item
+            </button>
+            {grandTotal>0 && (
+              <div style={{ marginTop:'10px', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#f0f4ff', border:'1.5px solid #c7d2fe', borderRadius:'10px' }}>
+                <span style={{ fontWeight:700, fontSize:'14px', color:'#4338ca' }}>Grand Total</span>
+                <span style={{ fontWeight:800, fontSize:'15px', color:'#3730a3' }}>{fmt(grandTotal)}</span>
+              </div>
+            )}
+            {paymentMethod==='cash' && cashBalance!==null && grandTotal>cashBalance && grandTotal>0 && (
+              <div style={{ marginTop:'6px', background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:'8px', padding:'10px 12px', fontSize:'12px', color:'#b91c1c' }}>
+                ⚠️ Total ({fmt(grandTotal)}) exceeds Cash Balance ({fmt(cashBalance)}).
+              </div>
+            )}
+          </div>
 
-            <div className="er-field" style={{opacity: seq_note ? 1 : 0.4, pointerEvents: seq_note ? 'auto' : 'none'}}>
-              <label className="er-label">Note (optional)</label>
-              <textarea className="er-input er-textarea" data-field="ex_note"
-                style={errorBorder('ex_note', fieldErrors)} placeholder="Description or reason…"
-                value={note} onChange={e => { setNote(e.target.value); clearFieldError('ex_note'); }} />
-              <ValidationNote field="ex_note" errors={fieldErrors} />
-            </div>
-            {paymentMethod === 'cash' && (
-              <p style={{ fontSize: '12px', color: '#667eea', margin: '4px 0 0', fontStyle: 'italic' }}>
-                💰 A Cash OUT entry will be created automatically in Cash at Shop.
-              </p>
-            )}
-            {category === 'Owner Drawings' && (
-              <p style={{ fontSize: '12px', color: '#8b5cf6', margin: '4px 0 0', fontStyle: 'italic' }}>
-                📤 This will also be recorded in Withdrawals.
-              </p>
-            )}
-          </>)}
+          {/* Note */}
+          <div className="er-field" style={{ opacity:seq_note?1:0.4, pointerEvents:seq_note?'auto':'none' }}>
+            <label className="er-label">Note (optional)</label>
+            <textarea className="er-input er-textarea" data-field="ex_note"
+              style={errorBorder('ex_note', fieldErrors)} placeholder="Description or reason…"
+              value={note} onChange={e => { setNote(e.target.value); clearFieldError('ex_note'); }} />
+            <ValidationNote field="ex_note" errors={fieldErrors} />
+          </div>
+
+          {paymentMethod==='cash' && grandTotal>0 && (
+            <p style={{ fontSize:'12px', color:'#667eea', margin:'4px 0 0', fontStyle:'italic' }}>
+              💰 A Cash OUT entry will be created automatically in Cash at Shop.
+            </p>
+          )}
+          {category==='Owner Drawings' && (
+            <p style={{ fontSize:'12px', color:'#8b5cf6', margin:'4px 0 0', fontStyle:'italic' }}>
+              📤 This will also be recorded in Owner's Withdrawals.
+            </p>
+          )}
 
         </div>
         <div className="er-modal-footer">
@@ -904,21 +671,14 @@ function AddExpenseModal({ onSave, onClose }) {
       </div>
 
       {showCatModal && (
-        <CategoryModal selected={category} onSelect={cat => { setCategory(cat); clearFieldError('ex_cat'); setAssetsResult(null); }} onClose={() => setShowCatModal(false)} />
-      )}
-      {showAssetsModal && (
-        <AddOperationalAssetsModal
-          initialSupplierName={payee} initialSupplierId={null} suppliersList={suppliersList}
-          onSave={handleAssetsResult}
-          onClose={() => { setShowAssetsModal(false); if (!assetsResult) setCategory(''); }}
-          onNewSupplier={() => { setShowAssetsModal(false); setShowSimpleSupplierModal(true); }}
-        />
+        <CategoryModal selected={category} onSelect={cat => { setCategory(cat); clearFieldError('ex_cat'); }} onClose={() => setShowCatModal(false)} />
       )}
       {showSimpleSupplierModal && (
         <SimpleAddSupplierModal
           onSave={async (newSupplier) => {
             await dataService.getSuppliers().then(s => setSuppliersList(s || []));
-            setPayee(newSupplier.name);
+            setSupplierSearch(newSupplier.name);
+            setResolvedSupplierId(newSupplier.id);
             setShowSimpleSupplierModal(false);
           }}
           onClose={() => setShowSimpleSupplierModal(false)}
@@ -927,6 +687,7 @@ function AddExpenseModal({ onSave, onClose }) {
     </div>
   );
 }
+
 
 // ── Expense Detail / Edit Modal ────────────────────────────────────────────────
 function ExpenseDetailModal({ expense, onClose, onSaved, onDeleted }) {
