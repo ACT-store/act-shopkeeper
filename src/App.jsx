@@ -70,7 +70,9 @@ export class ErrorBoundary extends React.Component {
 })();
 
 // Cash Reconciliation page index (used for navigation from closed modal)
-// NOTE: Withdrawals is inserted at index 4 (after Expenses), so indices shift by 1
+// Page order: CHECKOUT(0), SALES RECORD(1), CASH AT SHOP(2), PURCHASE RECORD(3),
+// EXPENSES RECORD(4), ADVANCED ORDERS(5), OWNER'S WITHDRAWALS(6),
+// CREDITORS & SUPPLIERS(7), DEBTORS(8), INVENTORY(9), CASH RECONCILIATION(10), SETTINGS(11)
 const CASH_RECON_INDEX = 10;
 const SETTINGS_INDEX   = 11;
 
@@ -138,40 +140,6 @@ const PAGES = [
       <p>Use Filter to view Cash In only, Cash Out only, or by date range. The summary boxes show Total Records and Net Balance.</p>
     `
   },
-  {
-    name: 'EXPENSES RECORD',
-    component: ExpensesRecord,
-    helpContent: `
-      <h3>Expenses Record</h3>
-      <p>This page tracks all money going out of your shop that is <strong>not</strong> for buying stock — things like rent, wages, utilities, transport, and other operating costs.</p>
-
-      <h4>How It Works</h4>
-      <p>Tap <strong>+ Add Expense</strong> &rarr; choose a category &rarr; enter the amount and payment method &rarr; add an optional note &rarr; Save. Cash expenses automatically create a Cash OUT entry in Cash Record.</p>
-
-      <h4>Categories</h4>
-      <p>Quick filters include <strong>Utilities</strong> and <strong>Wages</strong>. Tap <strong>More&hellip;</strong> to browse all categories including Rent, Transport, Loan Repayment, Owner Withdrawals, and more.</p>
-
-      <h4>Cash vs Non-Cash</h4>
-      <p>The summary cards show <strong>Cash Spent</strong> (paid from the cash drawer) and <strong>Non-Cash</strong> (bank transfer, mobile money, check) separately so you can reconcile easily.</p>
-    `
-  },
-  {
-    name: 'WITHDRAWALS',
-    component: Withdrawals,
-    helpContent: `
-      <h3>Withdrawals</h3>
-      <p>This page tracks all money taken out of the shop and held outside — with the owner, in a safe, or awaiting banking. It also records when money is returned to the shop (as float or for purchases).</p>
-
-      <h4>How It Works</h4>
-      <p>You do not add entries here manually. Records are created automatically when: the shop is <strong>closed</strong> at end of day (full counted cash taken out), the shop is <strong>opened</strong> with a float (money returned to shop), or <strong>Owner Drawings</strong> are recorded in Expenses.</p>
-
-      <h4>Reading the Balance</h4>
-      <p>The <strong>Balance Outside Shop</strong> card shows the total money currently held outside the shop. It goes <strong>up</strong> when cash is taken out and <strong>down</strong> when money is returned as float or for business use.</p>
-
-      <h4>OUT vs IN</h4>
-      <p><strong>OUT</strong> &mdash; money leaves the shop (end-of-day close, owner drawings). <strong>IN</strong> &mdash; money returns to the shop (opening float, re-open float).</p>
-    `
-  },
   { 
     name: 'PURCHASE RECORD',  
     component: PurchaseRecord,
@@ -190,6 +158,23 @@ const PAGES = [
       <p>&#x1f4f8; <strong>Receipt Photo</strong> &mdash; take a photo of the supplier's invoice as proof of purchase.</p>
       <p>&#x26a0;&#xfe0f; <strong>Cash Balance Check</strong> &mdash; if the total exceeds your current cash balance, the app warns you and suggests using credit instead.</p>
       <p>&#x1f4e6; <strong>Auto Stock Update</strong> &mdash; stock levels in Inventory increase automatically based on QTY &times; Pack Unit.</p>
+    `
+  },
+  {
+    name: 'EXPENSES RECORD',
+    component: ExpensesRecord,
+    helpContent: `
+      <h3>Expenses Record</h3>
+      <p>This page tracks all money going out of your shop that is <strong>not</strong> for buying stock — things like rent, wages, utilities, transport, and other operating costs.</p>
+
+      <h4>How It Works</h4>
+      <p>Tap <strong>+ Add Expense</strong> &rarr; choose a category &rarr; enter the amount and payment method &rarr; add an optional note &rarr; Save. Cash expenses automatically create a Cash OUT entry in Cash Record.</p>
+
+      <h4>Categories</h4>
+      <p>Quick filters include <strong>Utilities</strong> and <strong>Wages</strong>. Tap <strong>More&hellip;</strong> to browse all categories including Rent, Transport, Loan Repayment, Owner Withdrawals, and more.</p>
+
+      <h4>Cash vs Non-Cash</h4>
+      <p>The summary cards show <strong>Cash Spent</strong> (paid from the cash drawer) and <strong>Non-Cash</strong> (bank transfer, mobile money, check) separately so you can reconcile easily.</p>
     `
   },
   { 
@@ -213,6 +198,40 @@ const PAGES = [
       <p>Use the search bar to find a customer by name. Use the sort button (&uarr;&darr;) to order by balance, due date, or most recently modified.</p>
     `
   },
+  {
+    name: "OWNER'S WITHDRAWALS",
+    component: Withdrawals,
+    helpContent: `
+      <h3>Withdrawals</h3>
+      <p>This page tracks all money taken out of the shop and held outside — with the owner, in a safe, or awaiting banking. It also records when money is returned to the shop (as float or for purchases).</p>
+
+      <h4>How It Works</h4>
+      <p>You do not add entries here manually. Records are created automatically when: the shop is <strong>closed</strong> at end of day (full counted cash taken out), the shop is <strong>opened</strong> with a float (money returned to shop), or <strong>Owner Drawings</strong> are recorded in Expenses.</p>
+
+      <h4>Reading the Balance</h4>
+      <p>The <strong>Balance Outside Shop</strong> card shows the total money currently held outside the shop. It goes <strong>up</strong> when cash is taken out and <strong>down</strong> when money is returned as float or for business use.</p>
+
+      <h4>OUT vs IN</h4>
+      <p><strong>OUT</strong> &mdash; money leaves the shop (end-of-day close, owner drawings). <strong>IN</strong> &mdash; money returns to the shop (opening float, re-open float).</p>
+    `
+  },
+  { 
+    name: 'CREDITORS & SUPPLIERS',          
+    component: Creditors,
+    helpContent: `
+      <h3>Creditors &amp; Suppliers</h3>
+      <p>Suppliers are the businesses or people you buy your shop stock from. Creditors are suppliers or people your business owes money to because you bought on credit.</p>
+
+      <h4>Adding Suppliers</h4>
+      <p>Tap <strong>+ Supplier</strong> to register a new supplier with their name and contact details. Once added, they appear in the Purchase Record dropdown.</p>
+
+      <h4>How Creditors Work</h4>
+      <p>When you make a credit purchase in Purchase Record, the supplier becomes a creditor here automatically. Each creditor card shows total owed, total paid, and remaining balance.</p>
+
+      <h4>Payment Reminders</h4>
+      <p>Turn on Creditor Payment Reminders in Settings to receive alarm notifications at 8:30 AM, 12:00 PM, and 4:30 PM when you have outstanding creditor balances.</p>
+    `
+  },
   { 
     name: 'DEBTORS',          
     component: Debtors,
@@ -232,23 +251,6 @@ const PAGES = [
 
       <h4>Overdue Warning</h4>
       <p>If a debtor's repayment date has passed and they still owe money, they are flagged as overdue. You cannot sell to them on credit again until they clear their balance.</p>
-    `
-  },
-  { 
-    name: 'SUPPLIERS & CREDITORS',          
-    component: Creditors,
-    helpContent: `
-      <h3>Suppliers &amp; Creditors</h3>
-      <p>Suppliers are the businesses or people you buy your shop stock from. Creditors are suppliers or people your business owes money to because you bought on credit.</p>
-
-      <h4>Adding Suppliers</h4>
-      <p>Tap <strong>+ Supplier</strong> to register a new supplier with their name and contact details. Once added, they appear in the Purchase Record dropdown.</p>
-
-      <h4>How Creditors Work</h4>
-      <p>When you make a credit purchase in Purchase Record, the supplier becomes a creditor here automatically. Each creditor card shows total owed, total paid, and remaining balance.</p>
-
-      <h4>Payment Reminders</h4>
-      <p>Turn on Creditor Payment Reminders in Settings to receive alarm notifications at 8:30 AM, 12:00 PM, and 4:30 PM when you have outstanding creditor balances.</p>
     `
   },
   { 
