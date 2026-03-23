@@ -10,33 +10,75 @@ import './ExpensesRecord.css';
 
 // ── Category definitions ───────────────────────────────────────────────────────
 const SYSTEM_FEE_CAT = `${APP_NAME} System's weekly fee`;
+
+// KPA supplier name (auto-created when Kiribati Ports Authority category is selected)
+const KPA_SUPPLIER_NAME = 'Kiribati Ports Authority (KPA)';
+
+// Item name suggestions shown when Kiribati Ports Authority category is selected
+const KPA_ITEM_SUGGESTIONS = [
+  'Wharfage Dues',
+  'Port Cargo Handling Services',
+  'Lighterage',
+  'Delivery Charges',
+  'Collection Charges',
+  'Trailer Detention',
+  'Express Release',
+  'Storage Charges',
+];
+
 const CATEGORY_GROUPS = [
   {
-    group: 'Operating',
-    items: ['Utilities', 'Rent', 'Fuel', 'Internet', 'Maintenance', 'Supplies', 'Wages', SYSTEM_FEE_CAT],
+    group: 'Purchases & Inventory',
+    items: ['Purchase', 'TT Purchase', 'Koil'],
+  },
+  {
+    group: 'Transport & Logistics',
+    items: ['Freight', 'Handling', 'Toll Fare', 'Hire', 'Transport Expense', 'Fuel', 'Fare', 'Charter'],
+  },
+  {
+    group: 'Government & Regulatory',
+    items: ['Customs', 'Licence', 'KLTA', 'KPF', 'Kiribati Ports Authority', 'Tax'],
+  },
+  {
+    group: 'Utilities & Communications',
+    items: ['Utilities', 'Internet', 'Vodafone', 'Ocean Link', 'PUB'],
+  },
+  {
+    group: 'Staff & Labour',
+    items: ['Wages', 'Contractor\'s Payment', 'Staff Salaries'],
+  },
+  {
+    group: 'Professional & Administrative',
+    items: [SYSTEM_FEE_CAT, 'Sinita POS Hub (SPOSH)', 'Accounts', 'Stationery', 'Bank Charges'],
+  },
+  {
+    group: 'Property',
+    items: ['Rent'],
+  },
+  {
+    group: 'Construction',
+    items: ['Constructions', 'Local Charge'],
+  },
+  {
+    group: 'Community & Social',
+    items: ['Community Support', 'Donations'],
   },
   {
     group: 'Owner',
     items: ['Owner Drawings'],
   },
   {
-    group: 'Community',
-    items: ['Donations', 'Community Support'],
+    group: 'Finance',
+    items: ['Loan Installment'],
+  },
+  {
+    group: 'Miscellaneous',
+    items: ['Maintenance', 'Supplies', 'OTH'],
   },
 ];
 
-// Categories where the Paid To field shows specific pre-filled suggestions
-// (all other categories show the Supplier button)
-const CATEGORY_PAYEE_MODE = {
-  'Owner Drawings':     'owner',
-  'Wages':              'wages',
-  'Rent':               'landlord',
-  'Donations':          'donation',
-  'Community Support':  'community',
-};
-CATEGORY_PAYEE_MODE[SYSTEM_FEE_CAT] = 'system_fee';
 const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.items); // eslint-disable-line no-unused-vars
-const QUICK_CATS = ['Utilities', 'Wages', 'Owner Drawings'];
+const QUICK_CATS = ['Wages', 'Owner Drawings', 'Purchase', 'Fuel'];
 
 const PAYMENT_METHODS = [
   { value: 'cash',          label: 'Cash' },
@@ -454,12 +496,44 @@ function AddExpenseModal({ onSave, onClose }) {
   }, []);
 
   useEffect(() => {
+    // Reset fields on category change
     setSupplierSearch('');
     setResolvedSupplierId(null);
     setPaymentMethod('cash');
     setItems([{ id:1, name:'', qty:'', costPrice:'' }]);
     nextItemId.current = 2;
-  }, [category]);
+
+    // Auto-fill Paid To with KPA supplier when Kiribati Ports Authority is selected
+    if (category === 'Kiribati Ports Authority') {
+      (async () => {
+        let suppliers = suppliersList.length > 0 ? suppliersList : (await dataService.getSuppliers() || []);
+        const existing = suppliers.find(s =>
+          (s.name||s.customerName||'').toLowerCase() === KPA_SUPPLIER_NAME.toLowerCase()
+        );
+        if (existing) {
+          setSupplierSearch(existing.name || existing.customerName);
+          setResolvedSupplierId(existing.id);
+        } else {
+          // Auto-create KPA supplier
+          const newKpa = {
+            id: Date.now() + '-kpa',
+            customerName: KPA_SUPPLIER_NAME, name: KPA_SUPPLIER_NAME,
+            phone: '', customerPhone: '', gender: '',
+            whatsapp: '', email: '', address: 'Betio, Tarawa',
+            totalDue: 0, totalPaid: 0, balance: 0, purchaseIds: [], deposits: [],
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastSale: null,
+          };
+          const updated = [...suppliers, newKpa];
+          await dataService.setSuppliers(updated);
+          setSuppliersList(updated);
+          setSupplierSearch(KPA_SUPPLIER_NAME);
+          setResolvedSupplierId(newKpa.id);
+        }
+        // Pre-fill first item suggestion
+        setItems([{ id:1, name: KPA_ITEM_SUGGESTIONS[0], qty:'', costPrice:'' }]);
+      })();
+    }
+  }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sequential unlock
   const seq_cat   = !!date;
@@ -590,7 +664,35 @@ function AddExpenseModal({ onSave, onClose }) {
 
           {/* Items */}
           <div style={{ opacity:seq_items?1:0.4, pointerEvents:seq_items?'auto':'none' }}>
-            <label style={{ ...inLs, marginBottom:'8px' }}>Items *</label>
+            <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:'8px' }}>
+              <label style={inLs}>Items *</label>
+              {category === 'Kiribati Ports Authority' && (
+                <span style={{ fontSize:'11px', color:'#667eea', fontStyle:'italic' }}>KPA charge types below</span>
+              )}
+            </div>
+            {category === 'Kiribati Ports Authority' && (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'10px' }}>
+                {KPA_ITEM_SUGGESTIONS.map(s => (
+                  <button key={s} onMouseDown={e => {
+                    e.preventDefault();
+                    setItems(prev => {
+                      const last = prev[prev.length - 1];
+                      if (last && !last.name.trim()) {
+                        // fill the last blank item
+                        return prev.map((it, i) => i === prev.length - 1 ? { ...it, name: s } : it);
+                      } else {
+                        // add a new item with this name
+                        const newId = nextItemId.current++;
+                        return [...prev, { id: newId, name: s, qty: '', costPrice: '' }];
+                      }
+                    });
+                  }}
+                    style={{ padding:'4px 10px', borderRadius:'20px', border:'1.5px solid #667eea', background:'#eef2ff', color:'#4f46e5', fontSize:'11px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                    + {s}
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
               {items.map((it,idx) => { const sub=(parseFloat(it.qty)||0)*(parseFloat(it.costPrice)||0); return (
                 <div key={it.id} style={{ border:'1.5px solid var(--border, #e5e7eb)', borderRadius:'10px', padding:'12px', background:'var(--background, #f9fafb)', display:'flex', flexDirection:'column', gap:'10px' }}>
