@@ -216,8 +216,10 @@ function AddOperationalAssetsModal({ initialSupplierName, initialSupplierId, sup
 
   useEffect(() => {
     dataService.getCashEntries().then(entries => {
-      const bal = (entries || []).reduce((sum, e) =>
-        sum + (e.type === 'in' ? (e.amount || 0) : -(e.amount || 0)), 0);
+      const bal = (entries || [])
+        .filter(e => !e.status || e.status === 'active' || e.status === 'posted')
+        .reduce((sum, e) =>
+          sum + (e.type === 'in' ? (e.amount || 0) : -(e.amount || 0)), 0);
       setCashBalance(bal);
     });
   }, []);
