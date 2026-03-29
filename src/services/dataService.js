@@ -62,6 +62,8 @@ const DATA_KEYS = {
   WITHDRAWALS: 'withdrawals',
   BANK_TRANSFERS: 'bank_transfers',
   MPAISA_TRANSFERS: 'mpaisa_transfers',
+  JOURNAL_ENTRIES: 'journal_entries',
+  BILLS: 'bills',
 };
 
 // ── Device ID ─────────────────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ class DataService {
     this._expensesFetched = false;
     this._withdrawalsFetched = false;
     this._operationalAssetsFetched = false;
+    this._journalEntriesFetched = false;
     this._debtorsUnsubscribe = null; // Firebase real-time listener handle
     this._goodsUnsubscribe = null;   // Firebase real-time listener handle for goods
     this._salesUnsubscribe = null;   // Firebase real-time listener handle for sales
@@ -664,6 +667,150 @@ class DataService {
     }
   }
 
+  // ── Accounting helpers ─────────────────────────────────────────────────────
+
+  // Map source/paymentMethod → {debit, credit} account codes.
+  // Account codes:
+  //   1000 Cash at Shop | 1010 Cash at Bank | 1020 MPAiSA
+  //   1100 Stock on Hand | 1200 Accounts Receivable
+  //   2000 Accounts Payable | 3000 Owner Equity | 3100 Owner Drawings
+  //   4000 Sales Revenue | 4900 Cash Surplus
+  //   5000 COGS | 6000–6999 Expenses | 9999 Suspense
+  _resolveAccountCodes(source, paymentMethod = 'cash') {
+    const cashAccMap = { cash: '1000', bank_transfer: '1010', bank: '1010', mpaisa: '1020' };
+    const cashSide = cashAccMap[paymentMethod] || '1000';
+    const map = {
+      sale:              { debit: cashSide,  credit: '4000' },
+      credit_sale:       { debit: '1200',    credit: '4000' },
+      purchase:          { debit: '1100',    credit: cashSide },
+      credit_purchase:   { debit: '1100',    credit: '2000' },
+      creditor_payment:  { debit: '2000',    credit: cashSide },
+      debt_repayment:    { debit: cashSide,  credit: '1200' },
+      opening_float:     { debit: cashSide,  credit: '3000' },
+      reopen_float:      { debit: cashSide,  credit: '3000' },
+      withdrawal:        { debit: '3100',    credit: cashSide },
+      bank_deposit:      { debit: '1010',    credit: cashSide },
+      mpaisa_transfer:   { debit: '1020',    credit: cashSide },
+      owner_withdrawal:  { debit: '3100',    credit: cashSide },
+      expense:           { debit: null,      credit: cashSide }, // debit = account_code on expense
+      void_sale:         { debit: '4000',    credit: cashSide }, // reverse of sale
+      refund_sale:       { debit: '4000',    credit: cashSide },
+    };
+    return map[source] || { debit: cashSide, credit: '9999' };
+  }
+
+  // Post a journal entry to localforage + Firestore.
+  // lines: [{ account_code, account_name?, type: 'debit'|'credit', amount }]
+  // Never throws — journal failure must not block the main transaction.
+  async _postJournal({ ref, description, source_app = 'shopkeeper', lines = [] }) {
+    try {
+      const validLines = lines.filter(l => l && parseFloat(l.amount) > 0);
+      if (!validLines.length) return;
+
+      const totalDebit  = validLines.filter(l => l.type === 'debit') .reduce((s, l) => s + parseFloat(l.amount), 0);
+      const totalCredit = validLines.filter(l => l.type === 'credit').reduce((s, l) => s + parseFloat(l.amount), 0);
+
+      const entry = {
+        id:          'je_' + this.generateId(),
+        reference:   ref,
+        description,
+        source_app,
+        date:        this.nowWithTz(),
+        status:      'posted',
+        created_by:  localStorage.getItem('user_username') || auth.currentUser?.email || 'System',
+        lines:       validLines,
+        total_debit: parseFloat(totalDebit.toFixed(2)),
+        total_credit: parseFloat(totalCredit.toFixed(2)),
+        balanced:    Math.abs(totalDebit - totalCredit) < 0.01,
+        createdAt:   this.nowWithTz(),
+      };
+
+      const existing = await localforage.getItem(DATA_KEYS.JOURNAL_ENTRIES) || [];
+      existing.push(entry);
+      await localforage.setItem(DATA_KEYS.JOURNAL_ENTRIES, existing);
+
+      if (this.isOnline && auth.currentUser) {
+        setDoc(doc(db, 'journal_entries', entry.id), {
+          ...entry, createdAt: serverTimestamp(),
+        }).catch(e => console.warn('Journal entry sync failed:', e));
+      } else {
+        this.addToSyncQueue({ type: 'journal_entry', data: entry }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('_postJournal error (non-blocking):', e);
+    }
+  }
+
+  // Post a reversing journal entry for a previously posted reference.
+  async _reverseJournal(ref, description) {
+    try {
+      const all = await localforage.getItem(DATA_KEYS.JOURNAL_ENTRIES) || [];
+      const original = all.find(j => j.reference === ref && j.status === 'posted');
+      if (!original) return;
+
+      const reversalLines = (original.lines || []).map(l => ({
+        ...l,
+        type: l.type === 'debit' ? 'credit' : 'debit',
+      }));
+
+      await this._postJournal({
+        ref:        'reversal_' + ref,
+        description,
+        source_app: original.source_app || 'shopkeeper',
+        lines:      reversalLines,
+      });
+
+      // Mark original as reversed
+      const idx = all.findIndex(j => j.reference === ref && j.status === 'posted');
+      if (idx !== -1) {
+        all[idx] = { ...all[idx], status: 'reversed', reversed_at: this.nowWithTz() };
+        await localforage.setItem(DATA_KEYS.JOURNAL_ENTRIES, all);
+        if (this.isOnline && auth.currentUser) {
+          setDoc(doc(db, 'journal_entries', all[idx].id),
+            { status: 'reversed', reversed_at: all[idx].reversed_at, updatedAt: serverTimestamp() },
+            { merge: true }
+          ).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('_reverseJournal error (non-blocking):', e);
+    }
+  }
+
+  // Compute aging bucket and days_overdue for a debtor record.
+  // Adds: aging_bucket ('current'|'1_30'|'31_60'|'61_90'|'90_plus'),
+  //       days_overdue (0 if not overdue), days_until_due (null if no due date)
+  _computeDebtorAging(debtor) {
+    try {
+      const balance = parseFloat(debtor.balance || debtor.totalDue || 0);
+      if (balance <= 0) {
+        return { ...debtor, aging_bucket: 'cleared', days_overdue: 0, days_until_due: null };
+      }
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysUntilDue = debtor.repaymentDate
+        ? Math.floor((new Date(debtor.repaymentDate).setHours(0,0,0,0) - today.getTime()) / 86400000)
+        : null;
+
+      let aging_bucket;
+      if (daysUntilDue === null)       aging_bucket = 'current';
+      else if (daysUntilDue > 0)       aging_bucket = 'current';
+      else if (daysUntilDue >= -30)    aging_bucket = '1_30';
+      else if (daysUntilDue >= -60)    aging_bucket = '31_60';
+      else if (daysUntilDue >= -90)    aging_bucket = '61_90';
+      else                             aging_bucket = '90_plus';
+
+      return {
+        ...debtor,
+        aging_bucket,
+        days_overdue: daysUntilDue !== null && daysUntilDue < 0 ? Math.abs(daysUntilDue) : 0,
+        days_until_due: daysUntilDue,
+      };
+    } catch (_) {
+      return debtor;
+    }
+  }
+
   // Generate unique ID
   generateId() {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -943,6 +1090,7 @@ class DataService {
       const goods = await localforage.getItem(DATA_KEYS.GOODS) || [];
       const deltas = [];
       let stockChanged = false;
+      let totalCost = 0;
       newSale.items.forEach(soldItem => {
         const good = goods.find(g => String(g.id) === String(soldItem.id));
         if (good && typeof good.stock_quantity === 'number') {
@@ -951,6 +1099,11 @@ class DataService {
           good.stock_quantity = Math.max(0, good.stock_quantity + delta);
           deltas.push({ id: good.id, delta });
           stockChanged = true;
+          // Attach cost_price to the sale item for COGS tracking
+          const cp = parseFloat(good.cost_price) || 0;
+          soldItem.cost_price    = cp;
+          soldItem.cost_subtotal = cp * qty;
+          totalCost += cp * qty;
         }
       });
       if (stockChanged) {
@@ -972,6 +1125,42 @@ class DataService {
 
     // ── Notification: check for low stock after deduction ─────────────────
     localforage.getItem('goods').then(g => checkLowStock(g || [])).catch(() => {});
+
+    // ── Post journal entries (non-blocking) ──────────────────────────────
+    const saleTotal = parseFloat(newSale.total) || 0;
+    if (saleTotal > 0) {
+      if (newSale.paymentType === 'cash') {
+        this._postJournal({
+          ref: newSale.id,
+          description: `Cash sale — ${newSale.items.length} item(s)`,
+          lines: [
+            { account_code: '1000', account_name: 'Cash at Shop',  type: 'debit',  amount: saleTotal },
+            { account_code: '4000', account_name: 'Sales Revenue', type: 'credit', amount: saleTotal },
+          ],
+        }).catch(() => {});
+      } else if (newSale.paymentType === 'credit') {
+        this._postJournal({
+          ref: newSale.id,
+          description: `Credit sale — ${newSale.customerName || 'debtor'}`,
+          lines: [
+            { account_code: '1200', account_name: 'Accounts Receivable', type: 'debit',  amount: saleTotal },
+            { account_code: '4000', account_name: 'Sales Revenue',       type: 'credit', amount: saleTotal },
+          ],
+        }).catch(() => {});
+      }
+    }
+    // COGS journal — only fires when cost_price was present on goods
+    const totalCost = (newSale.items || []).reduce((s, i) => s + (parseFloat(i.cost_subtotal) || 0), 0);
+    if (totalCost > 0) {
+      this._postJournal({
+        ref: `cogs_${newSale.id}`,
+        description: `COGS — sale ${newSale.id.slice(-6)}`,
+        lines: [
+          { account_code: '5000', account_name: 'Cost of Goods Sold', type: 'debit',  amount: parseFloat(totalCost.toFixed(2)) },
+          { account_code: '1100', account_name: 'Stock on Hand',      type: 'credit', amount: parseFloat(totalCost.toFixed(2)) },
+        ],
+      }).catch(() => {});
+    }
 
     // ── Auto-record cash sales in the Cash Journal ────────────────────────
     if (newSale.paymentType === 'cash') {
@@ -1072,16 +1261,32 @@ class DataService {
     const sale = sales[index];
     const hoursDiff = (new Date() - new Date(sale.createdAt || sale.date || 0)) / (1000 * 60 * 60);
     if (hoursDiff > 2) throw new Error('Cannot delete sale after 2 hours');
-    sales.splice(index, 1);
+
+    // Soft delete — record stays in Firestore with status 'voided'
+    const voidedSale = {
+      ...sale,
+      status:    'voided',
+      voided_at: this.nowWithTz(),
+      voided_by: localStorage.getItem('user_username') || auth.currentUser?.email || 'Unknown',
+    };
+    sales[index] = voidedSale;
     await this.setSales(sales);
+
     if (this.isOnline && auth.currentUser) {
-      try { await deleteDoc(doc(db, 'sales', id)); } catch (err) { console.error('Firebase delete sale error:', err); }
+      try {
+        await setDoc(doc(db, 'sales', id), { ...voidedSale, updatedAt: serverTimestamp() }, { merge: true });
+      } catch (err) { console.error('Firebase void sale error:', err); }
     }
+
+    // Reverse journal entries for this sale
+    this._reverseJournal(id,           `Void sale ${id.slice(-6)}`).catch(() => {});
+    this._reverseJournal(`cogs_${id}`, `Void COGS ${id.slice(-6)}`).catch(() => {});
+
     // Reverse debtor charge if credit sale
     if (sale.paymentType === 'credit') {
       await this._reverseDebtorCharge(sale);
     }
-    // Restore stock for deleted items
+    // Restore stock for voided items
     await this._restoreStock(sale.items);
   }
 
@@ -1092,11 +1297,22 @@ class DataService {
     const entry = entries[index];
     const hoursDiff = (new Date() - new Date(entry.date || entry.createdAt || 0)) / (1000 * 60 * 60);
     if (hoursDiff > 2) throw new Error('Cannot delete cash entry after 2 hours');
-    entries.splice(index, 1);
+
+    // Soft delete
+    entries[index] = {
+      ...entry,
+      status:    'voided',
+      voided_at: this.nowWithTz(),
+      voided_by: localStorage.getItem('user_username') || auth.currentUser?.email || 'Unknown',
+    };
     await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
     if (this.isOnline && auth.currentUser) {
-      try { await deleteDoc(doc(db, 'cash_entries', id)); } catch (err) { console.error('Firebase delete cash entry error:', err); }
+      try {
+        await setDoc(doc(db, 'cash_entries', id), { ...entries[index], updatedAt: serverTimestamp() }, { merge: true });
+      } catch (err) { console.error('Firebase void cash entry error:', err); }
     }
+    // Reverse any linked journal entry
+    this._reverseJournal(`ce_${id}`, `Void cash entry ${id.slice(-6)}`).catch(() => {});
   }
 
   async deletePurchase(id) {
@@ -1106,32 +1322,56 @@ class DataService {
     const purchase = purchases[index];
     const hoursDiff = (new Date() - new Date(purchase.createdAt || purchase.date || 0)) / (1000 * 60 * 60);
     if (hoursDiff > 2) throw new Error('Cannot delete purchase after 2 hours');
-    purchases.splice(index, 1);
+
+    // Soft delete
+    purchases[index] = {
+      ...purchase,
+      status:    'voided',
+      voided_at: this.nowWithTz(),
+      voided_by: localStorage.getItem('user_username') || auth.currentUser?.email || 'Unknown',
+    };
     await localforage.setItem(DATA_KEYS.PURCHASES, purchases);
     if (this.isOnline && auth.currentUser) {
-      try { await deleteDoc(doc(db, 'purchases', id)); } catch (err) { console.error('Firebase delete purchase error:', err); }
+      try {
+        await setDoc(doc(db, 'purchases', id), { ...purchases[index], updatedAt: serverTimestamp() }, { merge: true });
+      } catch (err) { console.error('Firebase void purchase error:', err); }
     }
-    // If it was a cash purchase, delete the linked cash_entry
+    // Reverse linked journal entry
+    this._reverseJournal(`pur_${id}`, `Void purchase ${id.slice(-6)}`).catch(() => {});
+
+    // Soft-void the linked cash entry if it was a cash purchase
     if ((purchase.paymentType || purchase.payment_type || 'cash') === 'cash') {
-      await this._deletePurchaseCashEntry(id);
+      const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
+      const linked = entries.find(e => e.source === 'purchase' && e.purchaseId === id && e.status !== 'voided');
+      if (linked) {
+        const ei = entries.findIndex(e => e.id === linked.id);
+        entries[ei] = { ...linked, status: 'voided', voided_at: this.nowWithTz() };
+        await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
+        if (this.isOnline && auth.currentUser) {
+          setDoc(doc(db, 'cash_entries', linked.id), { ...entries[ei], updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+        }
+      }
     }
   }
 
   // ── Helper: find cash_entry linked to a purchase ─────────────────────────
   async _findPurchaseCashEntry(purchaseId) {
     const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
-    return entries.find(e => e.source === 'purchase' && e.purchaseId === purchaseId) || null;
+    return entries.find(e => e.source === 'purchase' && e.purchaseId === purchaseId && e.status !== 'voided') || null;
   }
 
-  // ── Helper: delete linked cash_entry for a purchase ──────────────────────
+  // ── Helper: soft-void linked cash_entry for a purchase ──────────────────
   async _deletePurchaseCashEntry(purchaseId) {
     const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
-    const entry = entries.find(e => e.source === 'purchase' && e.purchaseId === purchaseId);
-    if (!entry) return;
-    const filtered = entries.filter(e => e.id !== entry.id);
-    await localforage.setItem(DATA_KEYS.CASH_ENTRIES, filtered);
+    const idx = entries.findIndex(e => e.source === 'purchase' && e.purchaseId === purchaseId && e.status !== 'voided');
+    if (idx === -1) return;
+    entries[idx] = { ...entries[idx], status: 'voided', voided_at: this.nowWithTz() };
+    await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
     if (this.isOnline && auth.currentUser) {
-      try { await deleteDoc(doc(db, 'cash_entries', entry.id)); } catch (err) { console.error('Firebase delete purchase cash entry error:', err); }
+      setDoc(doc(db, 'cash_entries', entries[idx].id),
+        { status: 'voided', voided_at: entries[idx].voided_at, updatedAt: serverTimestamp() },
+        { merge: true }
+      ).catch(err => { console.error('Firebase void purchase cash entry error:', err); });
     }
   }
 
@@ -1322,7 +1562,7 @@ class DataService {
         }
 
         await localforage.setItem(DATA_KEYS.DEBTORS, merged);
-        return merged;
+        return merged.map(d => this._computeDebtorAging(d));
       }
     } catch (error) {
       console.error('Error fetching debtors from Firebase:', error);
@@ -1330,7 +1570,8 @@ class DataService {
 
     // All subsequent calls within the same session use local storage,
     // which always has the latest writes from updateDebtor / setDebtors.
-    return await this.get(DATA_KEYS.DEBTORS);
+    const local = await this.get(DATA_KEYS.DEBTORS);
+    return (local || []).map(d => this._computeDebtorAging(d));
   }
 
   // Call this to force a fresh pull from Firebase (e.g. after login sync).
@@ -1574,6 +1815,18 @@ class DataService {
         date: paymentDate,
       });
     }
+
+    // ── Post journal entry: Dr Cash (or AR) / Cr Accounts Receivable ────
+    const pmMap    = { cash: '1000', bank: '1010', bank_transfer: '1010', mpaisa: '1020', cheque: '1000' };
+    const debitAcc = pmMap[repayment.paymentMethod] || '1000';
+    this._postJournal({
+      ref: `repay_${repayment.id}`,
+      description: `Debt repayment — ${debtor.name || debtor.customerName || 'debtor'}`,
+      lines: [
+        { account_code: debitAcc, account_name: 'Cash / Bank', type: 'debit',  amount: paymentAmount },
+        { account_code: '1200',   account_name: 'Accounts Receivable', type: 'credit', amount: paymentAmount },
+      ],
+    }).catch(() => {});
 
     // Sync debtor to Firebase
     if (this.isOnline && auth.currentUser) {
@@ -2671,6 +2924,69 @@ class DataService {
       } else {
         await this.addToSyncQueue({ type: 'purchase', data: newPurchase });
       }
+
+      // ── Post journal entry (non-blocking) ────────────────────────────────
+      const purTotal = parseFloat(newPurchase.total) || 0;
+      if (purTotal > 0) {
+        const pm = newPurchase.paymentMethod || 'cash_shop';
+        const cashAcc = pm === 'owner_custody' || pm === 'owner_personal' ? '3100' : '1000';
+        if (paymentType === 'cash') {
+          this._postJournal({
+            ref: `pur_${newPurchase.id}`,
+            description: `Purchase — ${newPurchase.supplierName || 'Supplier'} (${newPurchase.invoiceRef || 'no ref'})`,
+            lines: [
+              { account_code: '1100', account_name: 'Stock on Hand', type: 'debit',  amount: purTotal },
+              { account_code: cashAcc, account_name: 'Cash',         type: 'credit', amount: purTotal },
+            ],
+          }).catch(() => {});
+        } else {
+          // Credit purchase: Dr Stock on Hand / Cr Accounts Payable
+          this._postJournal({
+            ref: `pur_${newPurchase.id}`,
+            description: `Credit purchase — ${newPurchase.supplierName || 'Supplier'} (${newPurchase.invoiceRef || 'no ref'})`,
+            lines: [
+              { account_code: '1100', account_name: 'Stock on Hand',     type: 'debit',  amount: purTotal },
+              { account_code: '2000', account_name: 'Accounts Payable',  type: 'credit', amount: purTotal },
+            ],
+          }).catch(() => {});
+
+          // Create a formal bill record for AP tracking
+          const billId = 'bill_' + this.generateId();
+          const bill = {
+            id:               billId,
+            purchase_id:      newPurchase.id,
+            creditor_id:      newPurchase.creditorId || null,
+            supplier_id:      newPurchase.supplierId || null,
+            supplier_name:    newPurchase.supplierName || '',
+            invoice_ref:      newPurchase.invoiceRef || '',
+            invoice_date:     newPurchase.date,
+            due_date:         newPurchase.dueDate || null,
+            amount_total:     purTotal,
+            amount_paid:      0,
+            amount_remaining: purTotal,
+            status:           'awaiting_payment',
+            line_items:       (newPurchase.items || []).map(i => ({
+              description: i.description || '',
+              qty:         parseFloat(i.qty) || 0,
+              cost_price:  parseFloat(i.costPrice) || 0,
+              subtotal:    (parseFloat(i.qty) || 0) * (parseFloat(i.costPrice) || 0),
+              good_id:     i.goodId || null,
+            })),
+            payments:         [],
+            created_by:       localStorage.getItem('user_username') || '',
+            created_app:      'shopkeeper',
+            createdAt:        this.nowWithTz(),
+            updatedAt:        this.nowWithTz(),
+          };
+          const existingBills = await localforage.getItem(DATA_KEYS.BILLS) || [];
+          existingBills.push(bill);
+          await localforage.setItem(DATA_KEYS.BILLS, existingBills);
+          if (this.isOnline && auth.currentUser) {
+            setDoc(doc(db, 'bills', billId), { ...bill, createdAt: serverTimestamp() }).catch(() => {});
+          }
+        }
+      }
+
       return newPurchase;
     } catch (err) {
       console.error('Error adding purchase:', err);
@@ -2746,6 +3062,42 @@ class DataService {
         source: 'creditor_payment',
         creditorId,
       });
+
+      // ── Post journal entry: Dr Accounts Payable / Cr Cash at Shop ─────
+      this._postJournal({
+        ref: `credpay_${creditorId}_${this.generateId()}`,
+        description: `Creditor payment — ${creditorName}${receiptNumber ? ' ref: ' + receiptNumber : ''}`,
+        lines: [
+          { account_code: '2000', account_name: 'Accounts Payable', type: 'debit',  amount: paymentAmount },
+          { account_code: '1000', account_name: 'Cash at Shop',     type: 'credit', amount: paymentAmount },
+        ],
+      }).catch(() => {});
+
+      // ── Apply payment to oldest outstanding bills (FIFO) ───────────────
+      try {
+        const bills = await localforage.getItem(DATA_KEYS.BILLS) || [];
+        let remaining = paymentAmount;
+        const unpaidBills = bills
+          .filter(b => b.creditor_id === creditorId && b.status !== 'paid' && b.status !== 'voided')
+          .sort((a, b) => new Date(a.invoice_date || 0) - new Date(b.invoice_date || 0));
+        for (const bill of unpaidBills) {
+          if (remaining <= 0) break;
+          const apply = Math.min(remaining, bill.amount_remaining);
+          bill.amount_paid      = parseFloat(((bill.amount_paid || 0) + apply).toFixed(2));
+          bill.amount_remaining = parseFloat((bill.amount_total - bill.amount_paid).toFixed(2));
+          bill.status           = bill.amount_remaining <= 0 ? 'paid' : 'partial';
+          bill.payments         = bill.payments || [];
+          bill.payments.push({ amount: apply, date: creditor.lastPayment, receipt: receiptNumber || '' });
+          bill.updatedAt        = creditor.lastPayment;
+          remaining -= apply;
+          if (this.isOnline && auth.currentUser) {
+            setDoc(doc(db, 'bills', bill.id), { ...bill, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+          }
+        }
+        await localforage.setItem(DATA_KEYS.BILLS, bills);
+      } catch (billErr) {
+        console.warn('Bill payment update failed (non-blocking):', billErr);
+      }
 
       if (this.isOnline && auth.currentUser) {
         const depositsForFirestore = (creditor.deposits || []).map(dep => {
@@ -3196,6 +3548,15 @@ class DataService {
         business_date: today,
         relatedId: today,
       });
+      // Journal: Dr Cash at Shop / Cr Owner Equity (float injected into shop drawer)
+      this._postJournal({
+        ref: `float_${today}`,
+        description: `Opening float — ${openerName}`,
+        lines: [
+          { account_code: '1000', account_name: 'Cash at Shop',  type: 'debit',  amount: float },
+          { account_code: '3000', account_name: 'Owner Equity',  type: 'credit', amount: float },
+        ],
+      }).catch(() => {});
     }
 
     return docData;
@@ -3241,6 +3602,40 @@ class DataService {
 
     // NOTE: Cash movement is NOT recorded automatically on close.
     // The admin must manually enter cash movement via Admin → Cash on Hand → Cash In modal.
+
+    // ── Post reconciliation journal (non-blocking) ─────────────────────
+    // Records any cash surplus or shortage as an accounting adjustment.
+    if (diff !== 0) {
+      const absDiff = parseFloat(Math.abs(diff).toFixed(2));
+      this._postJournal({
+        ref: `recon_${today}`,
+        description: diff > 0
+          ? `Cash surplus on close — ${this.userName()}`
+          : `Cash shortage on close — ${this.userName()}`,
+        lines: diff > 0 ? [
+          { account_code: '1000', account_name: 'Cash at Shop', type: 'debit',  amount: absDiff },
+          { account_code: '4900', account_name: 'Cash Surplus', type: 'credit', amount: absDiff },
+        ] : [
+          { account_code: '6850', account_name: 'Cash Shortage / Shrinkage', type: 'debit',  amount: absDiff },
+          { account_code: '1000', account_name: 'Cash at Shop',              type: 'credit', amount: absDiff },
+        ],
+      }).catch(() => {});
+    }
+
+    // ── Write confirmed cash balance snapshot for Balance Sheet ──────────
+    if (this.isOnline && auth.currentUser) {
+      setDoc(doc(db, 'account_balances', `1000_${today}`), {
+        account_code:      '1000',
+        account_name:      'Cash at Shop',
+        business_date:     today,
+        closing_balance:   counted,
+        expected_balance:  expected,
+        difference:        diff,
+        confirmed_by:      this.userName(),
+        confirmed_at:      now,
+        updatedAt:         serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+    }
 
     return docData;
   }
@@ -3349,6 +3744,7 @@ class DataService {
     const entries = await this.getCashEntriesByDate(business_date);
     let sum_in = 0, sum_out = 0;
     for (const e of entries) {
+      if (e.status === 'voided') continue;
       if (e.source === 'open_day' || e.source === 'close_day') continue;
       // opening_float and reopen_float are already accounted for in the opening_float field
       if (e.source === 'opening_float' || e.source === 'reopen_float') continue;
@@ -3668,6 +4064,24 @@ class DataService {
         });
       }
 
+      // ── Post journal entry (non-blocking) ─────────────────────────────
+      const expAmt = parseFloat(expense.amount) || 0;
+      if (expAmt > 0) {
+        const debitAcc  = expense.account_code || '6999';
+        const pmMap     = { cash: '1000', bank_transfer: '1010', bank: '1010', mpaisa: '1020' };
+        const creditAcc = expense.paymentMethod === 'on_credit'
+          ? '2000'
+          : (pmMap[expense.paymentMethod] || '1000');
+        this._postJournal({
+          ref: `exp_${expense.id}`,
+          description: expense.note || expense.category || 'Expense',
+          lines: [
+            { account_code: debitAcc,  account_name: expense.category || 'Expense', type: 'debit',  amount: expAmt },
+            { account_code: creditAcc, account_name: 'Cash / Bank',                 type: 'credit', amount: expAmt },
+          ],
+        }).catch(() => {});
+      }
+
       // Owner drawings → also record as a withdrawal (money leaves shop to owner)
       const drawingCategories = ['Owner Drawings', 'Owner Withdrawal', 'Drawings'];
       if (drawingCategories.some(c => (expense.category || '').toLowerCase().includes(c.toLowerCase()))) {
@@ -3743,23 +4157,41 @@ class DataService {
   async deleteExpense(expenseId) {
     try {
       const expenses = await localforage.getItem(DATA_KEYS.EXPENSES) || [];
-      const expense = expenses.find(e => e.id === expenseId);
-      const remaining = expenses.filter(e => e.id !== expenseId);
-      await localforage.setItem(DATA_KEYS.EXPENSES, remaining);
+      const idx = expenses.findIndex(e => e.id === expenseId);
+      if (idx === -1) throw new Error('Expense not found');
+      const expense = expenses[idx];
+
+      // Soft delete
+      expenses[idx] = {
+        ...expense,
+        status:    'voided',
+        voided_at: this.nowWithTz(),
+        voided_by: localStorage.getItem('user_username') || auth.currentUser?.email || 'Unknown',
+      };
+      await localforage.setItem(DATA_KEYS.EXPENSES, expenses);
 
       if (this.isOnline && auth.currentUser) {
-        try { await deleteDoc(doc(db, 'expenses', expenseId)); } catch (err) { console.error('Firebase deleteExpense error:', err); }
+        setDoc(doc(db, 'expenses', expenseId),
+          { ...expenses[idx], updatedAt: serverTimestamp() },
+          { merge: true }
+        ).catch(err => { console.error('Firebase void expense error:', err); });
       }
 
-      // Remove linked cash entry if it was a cash payment
+      // Reverse linked journal entry
+      this._reverseJournal(`exp_${expenseId}`, `Void expense ${expenseId.slice(-6)}`).catch(() => {});
+
+      // Soft-void linked cash entry
       if (expense && (expense.paymentMethod || 'cash') === 'cash') {
         const entries = await localforage.getItem(DATA_KEYS.CASH_ENTRIES) || [];
-        const linked = entries.find(e => e.source === 'expense' && e.expenseId === expenseId);
-        if (linked) {
-          const cleaned = entries.filter(e => !(e.source === 'expense' && e.expenseId === expenseId));
-          await localforage.setItem(DATA_KEYS.CASH_ENTRIES, cleaned);
+        const li = entries.findIndex(e => e.source === 'expense' && e.expenseId === expenseId && e.status !== 'voided');
+        if (li !== -1) {
+          entries[li] = { ...entries[li], status: 'voided', voided_at: this.nowWithTz() };
+          await localforage.setItem(DATA_KEYS.CASH_ENTRIES, entries);
           if (this.isOnline && auth.currentUser) {
-            try { await deleteDoc(doc(db, 'cash_entries', linked.id)); } catch (_) {}
+            setDoc(doc(db, 'cash_entries', entries[li].id),
+              { status: 'voided', voided_at: entries[li].voided_at, updatedAt: serverTimestamp() },
+              { merge: true }
+            ).catch(() => {});
           }
         }
       }
@@ -4068,6 +4500,44 @@ class DataService {
       }
     } catch (err) { console.error('getWithdrawals error:', err); }
     return await localforage.getItem(DATA_KEYS.WITHDRAWALS) || [];
+  }
+
+  // ── Bills (Formal AP records for credit purchases) ─────────────────────
+  async getBills() {
+    try {
+      if (this.isOnline && auth.currentUser) {
+        const snap = await getDocs(collection(db, 'bills'));
+        const fbBills = snap.docs.map(d => ({ id: d.id, ...d.data(),
+          invoice_date: typeof d.data().invoice_date === 'string' ? d.data().invoice_date : (d.data().invoice_date?.toDate?.()?.toISOString?.() || null),
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString?.() || d.data().createdAt,
+        }));
+        await localforage.setItem(DATA_KEYS.BILLS, fbBills);
+        return fbBills;
+      }
+    } catch (err) { console.error('getBills error:', err); }
+    return await localforage.getItem(DATA_KEYS.BILLS) || [];
+  }
+
+  // ── Journal entries (read access for reporting) ────────────────────────
+  async getJournalEntries() {
+    try {
+      if (this.isOnline && auth.currentUser && !this._journalEntriesFetched) {
+        this._journalEntriesFetched = true;
+        const snap = await getDocs(collection(db, 'journal_entries'));
+        const fbEntries = snap.docs.map(d => ({ id: d.id, ...d.data(),
+          date: typeof d.data().date === 'string' ? d.data().date : (d.data().date?.toDate?.()?.toISOString?.() || null),
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString?.() || d.data().createdAt,
+        }));
+        const local = await localforage.getItem(DATA_KEYS.JOURNAL_ENTRIES) || [];
+        const fbIds = new Set(fbEntries.map(e => e.id));
+        const localOnly = local.filter(e => !fbIds.has(e.id));
+        const merged = [...fbEntries, ...localOnly]
+          .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+        await localforage.setItem(DATA_KEYS.JOURNAL_ENTRIES, merged);
+        return merged;
+      }
+    } catch (err) { console.error('getJournalEntries error:', err); }
+    return await localforage.getItem(DATA_KEYS.JOURNAL_ENTRIES) || [];
   }
 
 }
