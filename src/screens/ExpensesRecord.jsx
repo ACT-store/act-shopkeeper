@@ -80,6 +80,61 @@ const CATEGORY_GROUPS = [
 const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.items); // eslint-disable-line no-unused-vars
 const QUICK_CATS = ['Wages', 'Owner Drawings', 'Purchase', 'Fuel'];
 
+// ── Category → Chart of Accounts code mapping ────────────────────────────
+// Codes: 6000+ = Expenses, 3100 = Owner Drawings, 2000 = on-credit payable
+const CATEGORY_ACCOUNT_MAP = {
+  // Staff & Labour
+  'Wages':                    '6200',
+  'Staff Salaries':           '6200',
+  "Contractor's Payment":     '6210',
+  // Property
+  'Rent':                     '6100',
+  // Transport & Logistics
+  'Freight':                  '6300',
+  'Handling':                 '6300',
+  'Toll Fare':                '6300',
+  'Hire':                     '6300',
+  'Transport Expense':        '6300',
+  'Fuel':                     '6310',
+  'Fare':                     '6300',
+  'Charter':                  '6300',
+  // Government & Regulatory
+  'Customs':                  '6500',
+  'Licence':                  '6510',
+  'KLTA':                     '6520',
+  'KPF':                      '6530',
+  'Kiribati Ports Authority': '6540',
+  'Tax':                      '6550',
+  // Utilities & Communications
+  'Utilities':                '6400',
+  'PUB':                      '6400',
+  'Internet':                 '6410',
+  'Vodafone':                 '6410',
+  'Ocean Link':               '6410',
+  // Professional & Administrative
+  'Accounts':                 '6600',
+  'Stationery':               '6610',
+  'Bank Charges':             '6620',
+  // Construction
+  'Constructions':            '6700',
+  'Local Charge':             '6700',
+  // Community & Social
+  'Community Support':        '6800',
+  'Donations':                '6810',
+  // Finance
+  'Loan Installment':         '6900',
+  // Owner
+  'Owner Drawings':           '3100',
+  // Purchases & Inventory (non-stock)
+  'Purchase':                 '5000',
+  'TT Purchase':              '5000',
+  'Koil':                     '5000',
+  // Maintenance & Miscellaneous
+  'Maintenance':              '6950',
+  'Supplies':                 '6960',
+  'OTH':                      '6999',
+};
+
 const PAYMENT_METHODS = [
   { value: 'cash',          label: 'Cash' },
   { value: 'bank_transfer', label: 'Bank Transfer' },
@@ -577,7 +632,7 @@ function AddExpenseModal({ onSave, onClose }) {
           await dataService.addOperationalAsset({ name:it.name.trim(), qty, costPrice, subtotal, supplierName, supplierId:resolvedSupplierId||null, paymentType:paymentMethod==='on_credit'?'credit':'cash', date:dateISO, source:'purchase' });
         }
       }
-      await dataService.addExpense({ date, amount:grandTotal, category, paymentMethod, payee:supplierName, note:note.trim()||itemsSummary, gender:payeeGender, createdAt:now, updatedAt:now });
+      await dataService.addExpense({ date, amount:grandTotal, category, account_code: CATEGORY_ACCOUNT_MAP[category] || '6999', paymentMethod, payee:supplierName, note:note.trim()||itemsSummary, gender:payeeGender, createdAt:now, updatedAt:now });
       await logAction('EXPENSE_ADDED', `Expense: ${category} — $${grandTotal.toFixed(2)} paid to ${supplierName}`).catch(() => {});
       onSave();
     } catch (e) { console.error(e); showError('ex_date', 'Failed to save. Please try again.'); }
