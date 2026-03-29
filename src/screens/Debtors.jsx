@@ -918,12 +918,33 @@ A.C.T Shop`;
             {searchTerm ? 'No debtors match your search.' : 'No debtors yet. Click "+ Add Debtor" to get started.'}
           </div>
         ) : (
-          filteredDebtors.map(debtor => (
+          filteredDebtors.map(debtor => {
+            const bucket = debtor.aging_bucket;
+            const agingStyle = {
+              current:  { bg: '#dcfce7', color: '#15803d', label: 'Current'    },
+              '1_30':   { bg: '#fef9c3', color: '#a16207', label: '1-30d over' },
+              '31_60':  { bg: '#ffedd5', color: '#c2410c', label: '31-60d'     },
+              '61_90':  { bg: '#fee2e2', color: '#b91c1c', label: '61-90d'     },
+              '90_plus':{ bg: '#fce7f3', color: '#9d174d', label: '90d+'       },
+              cleared:  { bg: '#f0fdf4', color: '#166534', label: 'Cleared'    },
+            }[bucket] || { bg: '#f3f4f6', color: '#6b7280', label: '' };
+            return (
             <div key={debtor.id} className="d-card" onClick={() => handleDebtorClick(debtor)}>
               <div className="d-card-name">{debtor.name || debtor.customerName}</div>
-              <div className="d-card-balance">{fmt((debtor.balance || debtor.totalDue || 0))}</div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'4px' }}>
+                <div className="d-card-balance">{fmt((debtor.balance || debtor.totalDue || 0))}</div>
+                {agingStyle.label && (
+                  <span style={{
+                    fontSize: '10px', fontWeight: 700, padding: '2px 7px',
+                    borderRadius: '10px', background: agingStyle.bg, color: agingStyle.color,
+                  }}>
+                    {agingStyle.label}
+                  </span>
+                )}
+              </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -1000,9 +1021,40 @@ A.C.T Shop`;
                         <span className="d-detail-value">{val || 'N/A'}</span>
                       </div>
                     ))}
+                    {selectedDebtor.repaymentDate && (
+                      <div className="d-detail-row">
+                        <span className="d-detail-label">Due Date</span>
+                        <span className="d-detail-value">{selectedDebtor.repaymentDate}</span>
+                      </div>
+                    )}
                     <div className="d-debt-summary">
                       <span className="d-detail-label">Outstanding Balance</span>
-                      <span className="d-debt-amount">{fmt((historyRows.length > 0 ? historyRows[0].runningBalance : (selectedDebtor.balance || selectedDebtor.totalDue || 0)))}</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                        <span className="d-debt-amount">{fmt((historyRows.length > 0 ? historyRows[0].runningBalance : (selectedDebtor.balance || selectedDebtor.totalDue || 0)))}</span>
+                        {(() => {
+                          const bucket = selectedDebtor.aging_bucket;
+                          const agingMap = {
+                            current:  { bg:'#dcfce7', color:'#15803d', label:'Current'     },
+                            '1_30':   { bg:'#fef9c3', color:'#a16207', label:'1–30d over'  },
+                            '31_60':  { bg:'#ffedd5', color:'#c2410c', label:'31–60d over' },
+                            '61_90':  { bg:'#fee2e2', color:'#b91c1c', label:'61–90d over' },
+                            '90_plus':{ bg:'#fce7f3', color:'#9d174d', label:'90d+ over'   },
+                            cleared:  null,
+                          };
+                          const style = agingMap[bucket];
+                          if (!style) return null;
+                          const daysOver = selectedDebtor.days_overdue;
+                          const tooltip  = daysOver > 0 ? `${daysOver} day${daysOver !== 1 ? 's' : ''} overdue` : null;
+                          return (
+                            <span title={tooltip || ''} style={{
+                              fontSize:'11px', fontWeight:700, padding:'3px 8px',
+                              borderRadius:'10px', background:style.bg, color:style.color,
+                            }}>
+                              {style.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}
